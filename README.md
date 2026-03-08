@@ -20,7 +20,7 @@ Runs as a web app or a native desktop client (Windows · macOS · Linux).
 - Custom emoji per space and personal packs
 - Fully self-hostable in minutes via Docker Compose
 
-> Heavily inspired by [Element Web](https://github.com/element-hq/element-web). Independent implementation, not a fork.
+> Heavily inspired by [Element Web](https://github.com/element-hq/element-web). Parts of the client logic and architecture are derived from the Element codebase and adapted for a different UX approach.
 
 ---
 
