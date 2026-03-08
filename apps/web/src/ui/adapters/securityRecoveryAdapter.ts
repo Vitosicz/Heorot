@@ -2,6 +2,8 @@ import type { GeneratedSecretStorageKey } from "matrix-js-sdk/src/crypto-api";
 import { decodeRecoveryKey } from "matrix-js-sdk/src/crypto-api/recovery-key";
 import type { MatrixClient, Room } from "matrix-js-sdk/src/matrix";
 
+import { withSecretStorageKeyProvider } from "../../core/client/cryptoCallbacks";
+
 export type RecoveryCredentialType = "recovery_key";
 export type SecurityRecoveryFlow = "restore" | "setup";
 
@@ -168,9 +170,6 @@ export async function restoreKeyBackupWithSecretStorageCredential(
     const secretStorage = client.secretStorage as unknown as {
         getDefaultKeyId: () => Promise<string | null>;
         checkKey: (key: Uint8Array<ArrayBuffer>, info: unknown) => Promise<boolean>;
-        callbacks?: {
-            getSecretStorageKey?: (opts: { keys: Record<string, unknown> }, name: string) => Promise<[string, Uint8Array<ArrayBuffer>]>;
-        };
     };
 
     const keyInfos = (await client.isKeyBackupKeyStored()) as Record<string, unknown> | null;
@@ -189,28 +188,20 @@ export async function restoreKeyBackupWithSecretStorageCredential(
             throw new Error("Provided security key does not unlock secret storage.");
         }
 
-        const callbacks = secretStorage.callbacks ?? {};
-        const previousGetSecretStorageKey = callbacks.getSecretStorageKey;
-        callbacks.getSecretStorageKey = async (opts: { keys: Record<string, unknown> }): Promise<[string, Uint8Array<ArrayBuffer>]> => {
-            if (opts.keys[selectedKeyId]) {
-                return [selectedKeyId, privateKey];
-            }
+        await withSecretStorageKeyProvider(
+            async ({ keyIds }) => {
+                const resolvedKeyId = keyIds.includes(selectedKeyId) ? selectedKeyId : keyIds[0];
+                if (!resolvedKeyId) {
+                    throw new Error("No matching secret storage key IDs available.");
+                }
 
-            const firstMatchingKeyId = Object.keys(opts.keys)[0];
-            if (!firstMatchingKeyId) {
-                throw new Error("No matching secret storage key IDs available.");
-            }
-
-            return [firstMatchingKeyId, privateKey];
-        };
-        secretStorage.callbacks = callbacks;
-
-        try {
-            await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
-            await crypto.restoreKeyBackup();
-        } finally {
-            callbacks.getSecretStorageKey = previousGetSecretStorageKey;
-        }
+                return [resolvedKeyId, privateKey];
+            },
+            async () => {
+                await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+                await crypto.restoreKeyBackup();
+            },
+        );
     } finally {
         privateKey.fill(0);
     }
@@ -247,36 +238,22 @@ export async function bootstrapSecretStorageSetup(
         throw new Error("Encryption is not available for this session.");
     }
 
-    const secretStorage = client.secretStorage as unknown as {
-        callbacks?: {
-            getSecretStorageKey?: (
-                opts: { keys: Record<string, unknown> },
-                name: string,
-            ) => Promise<[string, Uint8Array<ArrayBuffer>] | null>;
-        };
-    };
-    const callbacks = secretStorage.callbacks ?? {};
-    const previousGetSecretStorageKey = callbacks.getSecretStorageKey;
-
-    callbacks.getSecretStorageKey = async (
-        opts: { keys: Record<string, unknown> },
-    ): Promise<[string, Uint8Array<ArrayBuffer>]> => {
-        const firstRequestedKeyId = Object.keys(opts.keys)[0];
-        if (!firstRequestedKeyId) {
-            throw new Error("No secret storage key IDs available for setup.");
-        }
-        return [firstRequestedKeyId, secretStorageKey.privateKey];
-    };
-    secretStorage.callbacks = callbacks;
-
     const backupInfo = await crypto.getKeyBackupInfo();
-    try {
-        await crypto.bootstrapSecretStorage({
-            createSecretStorageKey: async () => secretStorageKey,
-            setupNewSecretStorage: true,
-            setupNewKeyBackup: !backupInfo?.version,
-        });
-    } finally {
-        callbacks.getSecretStorageKey = previousGetSecretStorageKey;
-    }
+    await withSecretStorageKeyProvider(
+        async ({ keyIds }) => {
+            const firstRequestedKeyId = keyIds[0];
+            if (!firstRequestedKeyId) {
+                throw new Error("No secret storage key IDs available for setup.");
+            }
+
+            return [firstRequestedKeyId, secretStorageKey.privateKey];
+        },
+        async () => {
+            await crypto.bootstrapSecretStorage({
+                createSecretStorageKey: async () => secretStorageKey,
+                setupNewSecretStorage: true,
+                setupNewKeyBackup: !backupInfo?.version,
+            });
+        },
+    );
 }

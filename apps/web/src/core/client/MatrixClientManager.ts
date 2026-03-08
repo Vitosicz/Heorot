@@ -1,4 +1,4 @@
-﻿import {
+import {
     type ICreateClientOpts,
     type IStartClientOpts,
     type MatrixClient,
@@ -10,6 +10,7 @@ import { logger } from "matrix-js-sdk/src/logger";
 
 import type { MatrixClientAssignOpts, MatrixCredentials } from "../types/credentials";
 import { createMatrixClient } from "./createMatrixClient";
+import { coreCryptoCallbacks } from "./cryptoCallbacks";
 
 export interface MatrixClientManagerOptions {
     initialSyncLimit?: number;
@@ -116,6 +117,7 @@ export class MatrixClientManager {
             deviceId: creds.deviceId,
             pickleKey: creds.pickleKey,
             timelineSupport: true,
+            cryptoCallbacks: { ...coreCryptoCallbacks },
         };
 
         this.matrixClient = createMatrixClient(opts);
