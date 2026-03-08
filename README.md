@@ -4,6 +4,16 @@ A self-hosted Matrix client built to feel like Discord. Spaces are servers. Room
 
 Runs as a web app or a native desktop client (Windows · macOS · Linux).
 
+![Heorot UI](docs/ui.png)
+
+<details>
+<summary>More screenshots</summary>
+
+![Voice channels](docs/voice.png)
+![Custom emoji](docs/emoji.png)
+
+</details>
+
 **What makes it different:**
 - Discord-style spaces and channels on top of the open Matrix protocol
 - Voice channels — self-hosted, no third-party infra required
