@@ -1,0 +1,28 @@
+{
+  "appId": "com.heorot.app",
+  "productName": "Heorot",
+  "asar": true,
+  "asarUnpack": "**/*.node",
+  "directories": {
+    "output": "dist-electron"
+  },
+  "files": [
+    "dist/electron/**/*",
+    "web/**/*",
+    "package.json"
+  ],
+  "afterPack": "scripts/electron-builder-after-pack.cjs",
+  "mac": {
+    "target": [
+      "dmg",
+      "zip"
+    ],
+    "category": "public.app-category.social-networking",
+    "hardenedRuntime": false,
+    "gatekeeperAssess": false,
+    "strictVerify": false,
+    "identity": null,
+    "mergeASARs": true
+  },
+  "dmg": {}
+}

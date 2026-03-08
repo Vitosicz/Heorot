@@ -1,0 +1,56 @@
+{
+  "appId": "com.heorot.app",
+  "productName": "Heorot",
+  "asar": true,
+  "asarUnpack": "**/*.node",
+  "electronFuses": {
+    "runAsNode": false,
+    "enableCookieEncryption": true,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true,
+    "grantFileProtocolExtraPrivileges": false,
+    "loadBrowserProcessSpecificV8Snapshot": false,
+    "resetAdHocDarwinSignature": true
+  },
+  "directories": {
+    "output": "dist-electron"
+  },
+  "files": [
+    "dist/electron/**/*",
+    "web/**/*",
+    "package.json"
+  ],
+  "afterPack": "scripts/electron-builder-after-pack.cjs",
+  "win": {
+    "target": [
+      "nsis"
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  },
+  "mac": {
+    "target": [
+      "dmg",
+      "zip"
+    ],
+    "category": "public.app-category.social-networking",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": true,
+    "strictVerify": true,
+    "entitlements": "electron/entitlements.mac.plist",
+    "entitlementsInherit": "electron/entitlements.mac.plist",
+    "mergeASARs": true
+  },
+  "dmg": {},
+  "linux": {
+    "target": [
+      "AppImage"
+    ],
+    "category": "Network",
+    "executableName": "heorot"
+  }
+}

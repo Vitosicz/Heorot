@@ -1,0 +1,30 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'none';
+        style-src 'self' 'unsafe-inline';
+        script-src 'self' 'wasm-unsafe-eval';
+        img-src * blob: data:;
+        connect-src * blob:;
+        font-src 'self' data:;
+        media-src * blob: data:;
+        child-src * blob: data:;
+        worker-src 'self' blob:;
+        frame-src * blob: data:;
+        form-action 'self';
+        manifest-src 'self';
+      "
+    />
+    <title>Heorot Web</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

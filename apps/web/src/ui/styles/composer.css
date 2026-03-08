@@ -1,0 +1,514 @@
+.composer-wrap {
+    border-top: 2px solid var(--border);
+    padding: 12px;
+    background: var(--bg-input);
+}
+
+.typing-indicator {
+    margin: 0 0 8px 50px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.composer-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+}
+
+.composer-plus-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-main);
+    font-size: 24px;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.composer-plus-button:hover:not(:disabled) {
+    border-color: var(--accent-soft);
+    background: var(--bg-hover);
+}
+
+.composer-plus-button:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.composer-input-shell {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-input);
+    padding: 8px 10px 8px 12px;
+    transition: border-color 120ms ease;
+}
+
+.composer-input-shell:hover {
+    border-color: var(--accent-soft);
+}
+
+.composer-input-shell:focus-within {
+    border-color: var(--primary);
+}
+
+.composer-input-shell.is-drag-active {
+    border-color: var(--accent-soft);
+    background: var(--bg-hover);
+}
+
+.composer-textarea {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text-main);
+    resize: none;
+    min-height: 24px;
+    max-height: 220px;
+    line-height: 1.35;
+    padding: 4px 0;
+}
+
+.composer-textarea::placeholder {
+    color: var(--text-muted);
+}
+
+.composer-input-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.composer-action-button {
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 17px;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+}
+
+.composer-action-button:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-main);
+}
+
+.composer-action-button[aria-disabled="true"] {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+.composer-emoji-anchor {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.composer-emoji-picker-popover {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 10px);
+    width: min(360px, calc(100vw - 120px));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-pane);
+    padding: 10px;
+    z-index: 1200;
+}
+
+.composer-mentions-popover {
+    margin: 8px 0 2px 50px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-pane);
+    overflow: hidden;
+}
+
+.composer-emojis-popover {
+    margin: 8px 0 2px 50px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-pane);
+    overflow: hidden;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.composer-mention-item {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-main);
+    text-align: left;
+    padding: 9px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.composer-mention-item:last-child {
+    border-bottom: 0;
+}
+
+.composer-mention-item:hover,
+.composer-mention-item.is-active {
+    background: var(--bg-hover);
+}
+
+.composer-emoji-shortcode-item {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-main);
+    text-align: left;
+    padding: 8px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.composer-emoji-shortcode-item:last-child {
+    border-bottom: 0;
+}
+
+.composer-emoji-shortcode-item:hover,
+.composer-emoji-shortcode-item.is-active {
+    background: var(--bg-hover);
+}
+
+.composer-emoji-shortcode-visual {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    font-size: 10px;
+}
+
+.composer-emoji-shortcode-visual img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.composer-emoji-shortcode-meta {
+    min-width: 0;
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.composer-emoji-shortcode-code {
+    font-size: 13px;
+    color: var(--text-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-emoji-shortcode-name {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-mention-name {
+    font-size: 13px;
+    color: var(--text-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-mention-id {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.composer-live-preview {
+    margin: 8px 0 2px 50px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-pane) 88%, transparent);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.composer-live-preview-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.composer-live-preview-body {
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--text-main);
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: block;
+}
+
+.composer-inline-custom-emoji {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    object-fit: contain;
+    vertical-align: text-bottom;
+}
+
+.composer-emoji-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.composer-emoji-picker-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.composer-emoji-search {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    border-radius: 8px;
+    color: var(--text-main);
+    padding: 8px 9px;
+}
+
+.composer-emoji-search:focus {
+    outline: 0;
+    border-color: var(--primary);
+}
+
+.composer-emoji-close {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-main);
+    line-height: 1;
+    cursor: pointer;
+}
+
+.composer-emoji-close:hover {
+    border-color: var(--accent-soft);
+    background: var(--bg-hover);
+}
+
+.composer-emoji-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.composer-emoji-section-title {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.composer-emoji-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.composer-emoji-grid-custom {
+    max-height: 188px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.composer-emoji-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-main);
+    min-width: 36px;
+    height: 36px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 8px;
+}
+
+.composer-emoji-item:hover {
+    border-color: var(--accent-soft);
+    background: var(--bg-hover);
+}
+
+.composer-emoji-item-custom {
+    min-width: 44px;
+    max-width: 100%;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.composer-emoji-item-custom img {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: contain;
+}
+
+.composer-emoji-item-custom span {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.composer-emoji-empty {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 10px 6px;
+}
+
+.composer-upload-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.composer-upload-item {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-input);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.composer-upload-item.is-failed {
+    border-color: rgba(248, 113, 113, 0.6);
+}
+
+.composer-upload-item.is-cancelled {
+    border-color: rgba(156, 163, 175, 0.5);
+}
+
+.composer-upload-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.composer-upload-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.composer-upload-name {
+    font-size: 13px;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.composer-upload-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.composer-upload-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.composer-upload-action {
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-main);
+    border-radius: 7px;
+    font-size: 12px;
+    line-height: 1;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.composer-upload-action:hover {
+    border-color: var(--accent-soft);
+    background: var(--bg-hover);
+}
+
+.composer-upload-progress {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--bg-app);
+    overflow: hidden;
+}
+
+.composer-upload-progress span {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--primary);
+    transition: width 140ms ease;
+}
+
+.composer-upload-item-error {
+    margin: 0;
+    font-size: 12px;
+    color: var(--danger);
+}

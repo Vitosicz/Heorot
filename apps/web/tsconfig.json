@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "matrix-js-sdk/src/matrix": ["node_modules/matrix-js-sdk/lib/matrix.d.ts"],
+      "matrix-js-sdk/src/logger": ["node_modules/matrix-js-sdk/lib/logger.d.ts"],
+      "matrix-js-sdk/src/base64": ["node_modules/matrix-js-sdk/lib/base64.d.ts"],
+      "matrix-js-sdk/src/types": ["node_modules/matrix-js-sdk/lib/types.d.ts"],
+      "matrix-js-sdk/src/utils/decryptAESSecretStorageItem": [
+        "node_modules/matrix-js-sdk/lib/utils/decryptAESSecretStorageItem.d.ts"
+      ],
+      "matrix-js-sdk/src/utils/encryptAESSecretStorageItem": [
+        "node_modules/matrix-js-sdk/lib/utils/encryptAESSecretStorageItem.d.ts"
+      ]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}

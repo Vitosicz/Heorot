@@ -1,0 +1,24 @@
+{
+  "default_server_config": {
+    "m.homeserver": {
+      "base_url": "https://matrix.example.com",
+      "server_name": "matrix.example.com"
+    },
+    "m.identity_server": {
+      "base_url": "https://matrix.example.com"
+    }
+  },
+  "brand": "Heorot",
+  "disable_guests": false,
+  "disable_custom_urls": false,
+  "force_verification": false,
+  "voice_enabled": true,
+  "voice_service_url": "https://matrix.example.com",
+  "livekit_ws_url": "wss://matrix.example.com/livekit",
+  "setting_defaults": {},
+  "enable_presence_by_hs_url": {
+    "https://matrix.example.com": true,
+    "http://localhost:8008": true,
+    "http://127.0.0.1:8008": true
+  }
+}
