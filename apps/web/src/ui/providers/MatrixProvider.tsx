@@ -12,7 +12,8 @@ import {
     normalizeHomeserverUrl,
     shouldTryFallbackLogin,
 } from "../adapters/loginAdapter";
-import { getDefaultIdentityServer, getFallbackHomeserver, waitForClientReady } from "../adapters/matrixCoreAdapter";
+import { waitForClientReady } from "../../core/client/clientReady";
+import { getDefaultIdentityServer, getFallbackHomeserver } from "../../core/config/serverDefaults";
 import {
     attemptAutomaticKeyBackupRestore,
     bootstrapSecretStorageSetup,

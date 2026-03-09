@@ -1,4 +1,4 @@
-﻿import type { MatrixCredentials, StoredSession } from "../types/credentials";
+import type { MatrixCredentials, StoredSession } from "../types/credentials";
 import type { AESEncryptedSecretStoragePayload } from "matrix-js-sdk/src/types";
 
 import { idbLoad } from "./storageAccess";
@@ -13,6 +13,23 @@ import {
 
 export const HOMESERVER_URL_KEY = "mx_hs_url";
 export const ID_SERVER_URL_KEY = "mx_is_url";
+export const USER_ID_KEY = "mx_user_id";
+export const DEVICE_ID_KEY = "mx_device_id";
+export const IS_GUEST_KEY = "mx_is_guest";
+export const HAS_PICKLE_KEY = "mx_has_pickle_key";
+
+export const CORE_SESSION_STORAGE_KEYS = [
+    HOMESERVER_URL_KEY,
+    ID_SERVER_URL_KEY,
+    USER_ID_KEY,
+    DEVICE_ID_KEY,
+    IS_GUEST_KEY,
+    HAS_PICKLE_KEY,
+    ACCESS_TOKEN_STORAGE_KEY,
+    REFRESH_TOKEN_STORAGE_KEY,
+    HAS_ACCESS_TOKEN_STORAGE_KEY,
+    HAS_REFRESH_TOKEN_STORAGE_KEY,
+] as const;
 
 function getLocalStorage(): Storage | undefined {
     if (typeof window === "undefined") {
@@ -32,15 +49,15 @@ export async function persistCredentials(credentials: MatrixCredentials): Promis
             localStorage.setItem(ID_SERVER_URL_KEY, credentials.identityServerUrl);
         }
 
-        localStorage.setItem("mx_user_id", credentials.userId);
-        localStorage.setItem("mx_is_guest", JSON.stringify(Boolean(credentials.guest)));
+        localStorage.setItem(USER_ID_KEY, credentials.userId);
+        localStorage.setItem(IS_GUEST_KEY, JSON.stringify(Boolean(credentials.guest)));
 
         if (credentials.deviceId) {
-            localStorage.setItem("mx_device_id", credentials.deviceId);
+            localStorage.setItem(DEVICE_ID_KEY, credentials.deviceId);
         }
 
         if (credentials.pickleKey) {
-            localStorage.setItem("mx_has_pickle_key", "true");
+            localStorage.setItem(HAS_PICKLE_KEY, "true");
         }
     }
 
@@ -70,9 +87,9 @@ export async function getStoredSessionVars(): Promise<StoredSession> {
     const hasAccessToken = (localStorage?.getItem(HAS_ACCESS_TOKEN_STORAGE_KEY) === "true") || Boolean(accessToken);
     const hasRefreshToken = (localStorage?.getItem(HAS_REFRESH_TOKEN_STORAGE_KEY) === "true") || Boolean(refreshToken);
 
-    const userId = localStorage?.getItem("mx_user_id") ?? undefined;
-    const deviceId = localStorage?.getItem("mx_device_id") ?? undefined;
-    const isGuest = localStorage?.getItem("mx_is_guest") === "true";
+    const userId = localStorage?.getItem(USER_ID_KEY) ?? undefined;
+    const deviceId = localStorage?.getItem(DEVICE_ID_KEY) ?? undefined;
+    const isGuest = localStorage?.getItem(IS_GUEST_KEY) === "true";
 
     return {
         hsUrl,

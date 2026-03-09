@@ -1,6 +1,6 @@
 import React from "react";
 
-import { getDefaultHomeserver, getDefaultIdentityServer, isCustomHomeserverDisabled } from "./adapters/matrixCoreAdapter";
+import { getDefaultHomeserver, getDefaultIdentityServer, isCustomHomeserverDisabled } from "../core/config/serverDefaults";
 import { AppShell } from "./components/AppShell";
 import { DeviceVerificationView } from "./components/DeviceVerificationView";
 import { LoginView } from "./components/LoginView";

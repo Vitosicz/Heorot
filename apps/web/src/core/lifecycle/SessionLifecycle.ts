@@ -3,8 +3,8 @@ import { logger } from "matrix-js-sdk/src/logger";
 
 import { MatrixClientManager } from "../client/MatrixClientManager";
 import { createMatrixClient } from "../client/createMatrixClient";
-import { WebPlatform } from "../platform/WebPlatform";
-import { getStoredSessionVars, persistCredentials } from "../storage/sessionStore";
+import { SSO_HOMESERVER_URL_KEY, SSO_ID_SERVER_URL_KEY, SSO_IDP_ID_KEY, WebPlatform } from "../platform/WebPlatform";
+import { CORE_SESSION_STORAGE_KEYS, getStoredSessionVars, persistCredentials } from "../storage/sessionStore";
 import { idbClear } from "../storage/storageAccess";
 import {
     ACCESS_TOKEN_IV,
@@ -16,6 +16,24 @@ import {
 import type { MatrixClientAssignOpts, MatrixCredentials } from "../types/credentials";
 
 const LOGOUT_REQUEST_TIMEOUT_MS = 10_000;
+
+const CORE_TRANSIENT_STORAGE_KEYS = [
+    SSO_HOMESERVER_URL_KEY,
+    SSO_ID_SERVER_URL_KEY,
+    SSO_IDP_ID_KEY,
+] as const;
+
+const CORE_STORAGE_KEYS_TO_CLEAR = [...CORE_SESSION_STORAGE_KEYS, ...CORE_TRANSIENT_STORAGE_KEYS] as const;
+
+function clearStorageKeys(storage: Storage | undefined, keys: readonly string[]): void {
+    if (!storage) {
+        return;
+    }
+
+    for (const key of keys) {
+        storage.removeItem(key);
+    }
+}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
     return await new Promise<T>((resolve, reject) => {
@@ -265,8 +283,8 @@ export class SessionLifecycle {
     }
     public async clearStorage(): Promise<void> {
         if (typeof window !== "undefined") {
-            window.localStorage.clear();
-            window.sessionStorage.clear();
+            clearStorageKeys(window.localStorage, CORE_STORAGE_KEYS_TO_CLEAR);
+            clearStorageKeys(window.sessionStorage, CORE_STORAGE_KEYS_TO_CLEAR);
         }
 
         await Promise.allSettled([idbClear("account"), idbClear("pickleKey")]);
@@ -278,3 +296,6 @@ export class SessionLifecycle {
         await cleanupClient.clearStores();
     }
 }
+
+
+
