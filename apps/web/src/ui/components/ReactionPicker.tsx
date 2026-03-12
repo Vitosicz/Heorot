@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { MatrixClient, Room } from "matrix-js-sdk/src/matrix";
+import { ClientEvent, RoomEvent, type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk/src/matrix";
 
 import { loadAvailableEmojis, resolveEmojiShortcode } from "../emoji/EmojiResolver";
+import { resetPersonalEmojiPackCache, resetSpaceEmojiPackCache } from "../emoji/EmojiPackStore";
+import { PERSONAL_EMOJI_PACK_EVENT_TYPE, SPACE_EMOJI_PACK_EVENT_TYPE } from "../emoji/EmojiPackTypes";
 import { subscribeEmojiPackUpdated } from "../emoji/emojiEvents";
 import { mxcThumbnailToHttp } from "../utils/mxc";
 
@@ -47,14 +49,48 @@ export function ReactionPicker({
             }
         };
 
-        void load();
-        const unsubscribeEmojiPackUpdated = subscribeEmojiPackUpdated(() => {
+        const reload = (): void => {
             void load();
+        };
+
+        reload();
+
+        const onTimeline = (event: MatrixEvent): void => {
+            if (event.getType() !== SPACE_EMOJI_PACK_EVENT_TYPE) {
+                return;
+            }
+
+            const updatedSpaceId = typeof event.getRoomId === "function" ? event.getRoomId() : undefined;
+            resetSpaceEmojiPackCache(typeof updatedSpaceId === "string" ? updatedSpaceId : undefined);
+            reload();
+        };
+
+        const onAccountData = (event: MatrixEvent): void => {
+            if (event.getType() !== PERSONAL_EMOJI_PACK_EVENT_TYPE) {
+                return;
+            }
+
+            resetPersonalEmojiPackCache();
+            reload();
+        };
+
+        const unsubscribeEmojiPackUpdated = subscribeEmojiPackUpdated((detail) => {
+            if (detail.kind === "space") {
+                resetSpaceEmojiPackCache(detail.spaceId);
+            } else {
+                resetPersonalEmojiPackCache();
+            }
+            reload();
         });
+
+        client.on(RoomEvent.Timeline, onTimeline);
+        client.on(ClientEvent.AccountData, onAccountData);
 
         return () => {
             cancelled = true;
             unsubscribeEmojiPackUpdated();
+            client.removeListener(RoomEvent.Timeline, onTimeline);
+            client.removeListener(ClientEvent.AccountData, onAccountData);
         };
     }, [activeSpaceId, client, room]);
 

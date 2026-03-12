@@ -14,8 +14,13 @@ const EMPTY_PACK: EmojiPackContent = {
     emojis: {},
 };
 
-const spacePackCache = new Map<string, EmojiPackContent | null>();
-let personalPackCache: EmojiPackContent | null | undefined;
+interface EmojiPackCacheEntry {
+    marker: string;
+    pack: EmojiPackContent | null;
+}
+
+const spacePackCache = new Map<string, EmojiPackCacheEntry>();
+let personalPackCache: EmojiPackCacheEntry | undefined;
 
 function clonePack(pack: EmojiPackContent | null): EmojiPackContent | null {
     if (!pack) {
@@ -208,6 +213,40 @@ function normalizePackContent(raw: unknown): EmojiPackContent | null {
     };
 }
 
+function getCacheMarkerFromContent(content: unknown): string {
+    if (content === undefined) {
+        return "__undefined__";
+    }
+
+    if (content === null) {
+        return "__null__";
+    }
+
+    try {
+        return JSON.stringify(content);
+    } catch {
+        return "__unserializable__";
+    }
+}
+
+function getEventCacheMarker(event: unknown, missingMarker: string): string {
+    if (!event || typeof event !== "object") {
+        return missingMarker;
+    }
+
+    const matrixEvent = event as {
+        getId?: () => string | null | undefined;
+        getContent?: () => unknown;
+    };
+    const eventId = typeof matrixEvent.getId === "function" ? matrixEvent.getId() : undefined;
+    if (typeof eventId === "string" && eventId.length > 0) {
+        return `event:${eventId}`;
+    }
+
+    const content = typeof matrixEvent.getContent === "function" ? matrixEvent.getContent() : undefined;
+    return `content:${getCacheMarkerFromContent(content)}`;
+}
+
 function normalizeShortcode(raw: string): string {
     const trimmed = raw.trim().toLowerCase();
     let withoutWhitespace = "";
@@ -254,42 +293,46 @@ export function canEditSpacePack(client: MatrixClient, room: Room | null): boole
 export async function getSpacePack(client: MatrixClient, spaceId: string): Promise<EmojiPackContent | null> {
     const room = client.getRoom(spaceId);
     if (!room) {
-        spacePackCache.set(spaceId, null);
         return null;
     }
 
-    if (spacePackCache.has(spaceId)) {
-        return clonePack(spacePackCache.get(spaceId) ?? null);
+    const stateEvent = room.currentState.getStateEvents(SPACE_EMOJI_PACK_EVENT_TYPE, "");
+    const marker = getEventCacheMarker(stateEvent, "__missing_space_pack_state_event__");
+
+    const cached = spacePackCache.get(spaceId);
+    if (cached && cached.marker === marker) {
+        return clonePack(cached.pack);
     }
 
-    const stateEvent = room.currentState.getStateEvents(SPACE_EMOJI_PACK_EVENT_TYPE, "");
     const pack = normalizePackContent(stateEvent?.getContent());
-    spacePackCache.set(spaceId, pack);
+    spacePackCache.set(spaceId, { marker, pack });
     return clonePack(pack);
 }
 
 export async function getPersonalPack(client: MatrixClient): Promise<EmojiPackContent | null> {
-    if (personalPackCache !== undefined) {
-        return clonePack(personalPackCache ?? null);
+    const accountData = client.getAccountData(PERSONAL_EMOJI_PACK_EVENT_TYPE as any);
+    const marker = getEventCacheMarker(accountData, "__missing_personal_pack_account_data_event__");
+
+    if (personalPackCache && personalPackCache.marker === marker) {
+        return clonePack(personalPackCache.pack);
     }
 
-    const accountData = client.getAccountData(PERSONAL_EMOJI_PACK_EVENT_TYPE as any);
     const pack = normalizePackContent(accountData?.getContent());
-    personalPackCache = pack;
+    personalPackCache = { marker, pack };
     return clonePack(pack);
 }
 
 export async function saveSpacePack(client: MatrixClient, spaceId: string, pack: EmojiPackContent): Promise<void> {
     const sanitized = sanitizePack(pack);
     await client.sendStateEvent(spaceId, SPACE_EMOJI_PACK_EVENT_TYPE as any, sanitized as any, "");
-    spacePackCache.set(spaceId, sanitized);
+    spacePackCache.set(spaceId, { marker: `content:${getCacheMarkerFromContent(sanitized)}`, pack: sanitized });
     emitEmojiPackUpdated({ kind: "space", spaceId });
 }
 
 export async function savePersonalPack(client: MatrixClient, pack: EmojiPackContent): Promise<void> {
     const sanitized = sanitizePack(pack);
     await client.setAccountData(PERSONAL_EMOJI_PACK_EVENT_TYPE as any, sanitized as any);
-    personalPackCache = sanitized;
+    personalPackCache = { marker: `content:${getCacheMarkerFromContent(sanitized)}`, pack: sanitized };
     emitEmojiPackUpdated({ kind: "personal" });
 }
 
@@ -328,14 +371,24 @@ export async function upsertPersonalEmoji(
     return shortcode;
 }
 
-export function resetEmojiPackCache(spaceId?: string): void {
+export function resetSpaceEmojiPackCache(spaceId?: string): void {
     if (spaceId) {
         spacePackCache.delete(spaceId);
         return;
     }
 
     spacePackCache.clear();
+}
+
+export function resetPersonalEmojiPackCache(): void {
     personalPackCache = undefined;
+}
+
+export function resetEmojiPackCache(spaceId?: string): void {
+    resetSpaceEmojiPackCache(spaceId);
+    if (!spaceId) {
+        resetPersonalEmojiPackCache();
+    }
 }
 
 export function getFeatureRenderReactionImages(): boolean {

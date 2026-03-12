@@ -10,6 +10,35 @@ const AUTH_MEDIA_PATH_PREFIX = "/_matrix/client/v1/media/";
 
 const serverSupportMap = {};
 let dbPromise;
+let cachedUserInfo = null;
+
+function normalizeUserInfoCandidate(candidate) {
+    if (!candidate || typeof candidate !== "object") {
+        return null;
+    }
+
+    const userId = typeof candidate.userId === "string" && candidate.userId ? candidate.userId : undefined;
+    const deviceId = typeof candidate.deviceId === "string" && candidate.deviceId ? candidate.deviceId : undefined;
+    const homeserver = typeof candidate.homeserver === "string" && candidate.homeserver ? candidate.homeserver : undefined;
+    if (!userId || !deviceId || !homeserver) {
+        return null;
+    }
+
+    return { userId, deviceId, homeserver };
+}
+
+function setCachedUserInfo(candidate) {
+    cachedUserInfo = normalizeUserInfoCandidate(candidate);
+    return cachedUserInfo;
+}
+
+self.addEventListener("message", (event) => {
+    if (!event?.data || event.data.type !== "userinfo_sync") {
+        return;
+    }
+
+    setCachedUserInfo(event.data);
+});
 
 self.addEventListener("install", (event) => {
     event.waitUntil(self.skipWaiting());
@@ -114,14 +143,27 @@ function generateResponseKey() {
 }
 
 async function getAuthData(client) {
-    if (!client) {
-        throw new Error("No client for service worker auth handshake");
+    let userInfo = cachedUserInfo;
+    let handshakeClient = client;
+
+    if (!handshakeClient && !userInfo) {
+        const availableClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        handshakeClient = availableClients[0] ?? null;
     }
 
-    const { userId, deviceId, homeserver } = await askClientForUserInfo(client);
-    if (!userId || !deviceId || !homeserver) {
+    if (handshakeClient) {
+        try {
+            userInfo = setCachedUserInfo(await askClientForUserInfo(handshakeClient));
+        } catch {
+            userInfo = cachedUserInfo;
+        }
+    }
+
+    if (!userInfo) {
         throw new Error("Missing user info for service worker auth handshake");
     }
+
+    const { userId, deviceId, homeserver } = userInfo;
 
     const storedAccessToken = await idbLoad(ACCOUNT_STORE_NAME, ACCESS_TOKEN_STORAGE_KEY);
     if (!storedAccessToken) {

@@ -14,7 +14,7 @@ import {
 
 import { memberAvatarSources } from "../adapters/avatar";
 import { mediaFromMxc } from "../adapters/media";
-import { normalizeEmojiShortcode } from "../emoji/EmojiPackStore";
+import { normalizeEmojiShortcode, resetPersonalEmojiPackCache, resetSpaceEmojiPackCache } from "../emoji/EmojiPackStore";
 import { PERSONAL_EMOJI_PACK_EVENT_TYPE, SPACE_EMOJI_PACK_EVENT_TYPE } from "../emoji/EmojiPackTypes";
 import { loadAvailableEmojis } from "../emoji/EmojiResolver";
 import { mxidLocalpart, tokenizeMatrixMentions } from "../mentions/mentionTokens";
@@ -193,6 +193,29 @@ function delay(ms: number): Promise<void> {
     return new Promise((resolve) => {
         setTimeout(resolve, ms);
     });
+}
+
+function withImageRetryCacheBuster(url: string): string {
+    const hashIndex = url.indexOf("#");
+    const hash = hashIndex >= 0 ? url.slice(hashIndex) : "";
+    const baseUrl = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    return `${baseUrl}${separator}__heorot_retry=${Date.now()}${hash}`;
+}
+
+function retryImageLoadOnce(event: React.SyntheticEvent<HTMLImageElement>): void {
+    const image = event.currentTarget;
+    if (image.dataset.heorotRetryAttempted === "1") {
+        return;
+    }
+
+    const currentSource = image.currentSrc || image.src;
+    if (!currentSource) {
+        return;
+    }
+
+    image.dataset.heorotRetryAttempted = "1";
+    image.src = withImageRetryCacheBuster(currentSource);
 }
 
 async function fetchEncryptedArrayBufferWithRetry(
@@ -1334,15 +1357,22 @@ export function Timeline({
         void loadEmojiSources();
 
         const onTimeline = (event: MatrixEvent): void => {
-            if (event.getType() === SPACE_EMOJI_PACK_EVENT_TYPE) {
-                void loadEmojiSources();
+            if (event.getType() !== SPACE_EMOJI_PACK_EVENT_TYPE) {
+                return;
             }
+
+            const updatedSpaceId = typeof event.getRoomId === "function" ? event.getRoomId() : undefined;
+            resetSpaceEmojiPackCache(typeof updatedSpaceId === "string" ? updatedSpaceId : undefined);
+            void loadEmojiSources();
         };
 
         const onAccountData = (event: MatrixEvent): void => {
-            if (event.getType() === PERSONAL_EMOJI_PACK_EVENT_TYPE) {
-                void loadEmojiSources();
+            if (event.getType() !== PERSONAL_EMOJI_PACK_EVENT_TYPE) {
+                return;
             }
+
+            resetPersonalEmojiPackCache();
+            void loadEmojiSources();
         };
 
         client.on(RoomEvent.Timeline, onTimeline);
@@ -2028,6 +2058,7 @@ export function Timeline({
                                             title={imageAlt}
                                             loading="lazy"
                                             decoding="async"
+                                            onError={retryImageLoadOnce}
                                         />
                                     </button>
                                 </div>
@@ -2161,6 +2192,7 @@ export function Timeline({
                                                     alt=""
                                                     loading="lazy"
                                                     decoding="async"
+                                                    onError={retryImageLoadOnce}
                                                 />
                                             ) : null}
                                             <span className="timeline-link-preview-body">

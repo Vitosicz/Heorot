@@ -70,6 +70,87 @@ describe("EmojiPackStore", () => {
         });
     });
 
+    it("does not cache missing space room as null", async () => {
+        const store = await loadStore();
+
+        const stateEvent = {
+            getContent: () => ({
+                ":cat:": "mxc://hs/cat",
+            }),
+        };
+
+        const room = {
+            currentState: {
+                getStateEvents: vi.fn(() => stateEvent),
+            },
+        };
+
+        const client = {
+            getRoom: vi.fn().mockReturnValueOnce(null).mockReturnValue(room),
+        };
+
+        const firstPack = await store.getSpacePack(client as any, "!space:hs");
+        const secondPack = await store.getSpacePack(client as any, "!space:hs");
+
+        expect(firstPack).toBeNull();
+        expect(secondPack).toEqual({
+            version: 1,
+            emojis: {
+                ":cat:": {
+                    url: "mxc://hs/cat",
+                    name: "cat",
+                    created_by: undefined,
+                    created_ts: undefined,
+                },
+            },
+        });
+        expect(client.getRoom).toHaveBeenCalledTimes(2);
+    });
+
+    it("reloads personal pack when account-data content changes", async () => {
+        const store = await loadStore();
+        let currentContent: Record<string, unknown> = {
+            ":fox:": "mxc://hs/fox",
+        };
+
+        const accountDataEvent = {
+            getContent: () => currentContent,
+        };
+
+        const client = {
+            getAccountData: vi.fn(() => accountDataEvent),
+        };
+
+        const firstPack = await store.getPersonalPack(client as any);
+        currentContent = {
+            ":wolf:": "mxc://hs/wolf",
+        };
+        const secondPack = await store.getPersonalPack(client as any);
+
+        expect(firstPack).toEqual({
+            version: 1,
+            emojis: {
+                ":fox:": {
+                    url: "mxc://hs/fox",
+                    name: "fox",
+                    created_by: undefined,
+                    created_ts: undefined,
+                },
+            },
+        });
+        expect(secondPack).toEqual({
+            version: 1,
+            emojis: {
+                ":wolf:": {
+                    url: "mxc://hs/wolf",
+                    name: "wolf",
+                    created_by: undefined,
+                    created_ts: undefined,
+                },
+            },
+        });
+    });
+
     it("upserts personal emoji with normalized shortcode and default name", async () => {
         const store = await loadStore();
         const setAccountData = vi.fn(async () => undefined);

@@ -17,7 +17,7 @@ function createSettings(partial?: Partial<UserLocalSettings>): UserLocalSettings
             showTimestamps: true,
             closeOnWindowCloseMinimize: true,
             chatLineLengthCh: 0,
-            showSpaceChannelAvatars: true,
+            showSpaceChannelAvatars: false,
         },
         notifications: {
             notificationsEnabled: false,
@@ -54,7 +54,7 @@ describe("settingsStore", () => {
         const settings = loadUserLocalSettings();
 
         expect(settings.appearance.theme).toBe("dark");
-        expect(settings.appearance.showSpaceChannelAvatars).toBe(true);
+        expect(settings.appearance.showSpaceChannelAvatars).toBe(false);
         expect(settings.audio.preferredAudioInputId).toBe("default");
         expect(settings.notifications.customMessageSoundDataUrl).toBeNull();
     });
