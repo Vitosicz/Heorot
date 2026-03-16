@@ -216,6 +216,17 @@ function hasSpaceParent(room: Room): boolean {
     });
 }
 
+function getDirectInviteTargetUserId(room: Room, ownUserId: string): string | null {
+    const roomAsDirectInviteRoom = room as Room & {
+        getDMInviter?: () => string | undefined;
+    };
+    const inviterUserId = roomAsDirectInviteRoom.getDMInviter?.();
+    if (typeof inviterUserId !== "string" || inviterUserId.length === 0 || inviterUserId === ownUserId) {
+        return null;
+    }
+    return inviterUserId;
+}
+
 function findMappedDirectRoomId(client: MatrixClient, targetUserId: string): string | null {
     const ownUserId = client.getUserId();
     if (!ownUserId) {
@@ -225,18 +236,33 @@ function findMappedDirectRoomId(client: MatrixClient, targetUserId: string): str
     const rawDirectContent = client.getAccountData(EventType.Direct)?.getContent();
     const sanitized = patchSelfMappedDirectRooms(client, sanitizeMDirectContent(rawDirectContent));
     const mappedRoomIds = sanitized[targetUserId];
-    if (!mappedRoomIds || mappedRoomIds.length === 0) {
-        return null;
-    }
 
     const mappedRooms = sortRoomsByActivity(
-        mappedRoomIds
+        (mappedRoomIds ?? [])
             .map((roomId) => client.getRoom(roomId))
             .filter((room): room is Room => Boolean(room))
             .filter((room) => isRoomMappedDmCandidate(room, targetUserId, ownUserId)),
     );
+    if (mappedRooms.length > 0) {
+        return mappedRooms[0].roomId;
+    }
 
-    return mappedRooms[0]?.roomId ?? null;
+    const hintedInviteRooms = sortRoomsByActivity(
+        client.getRooms().filter((room) => {
+            if (room.isSpaceRoom()) {
+                return false;
+            }
+            if (room.getMyMembership() !== "invite") {
+                return false;
+            }
+            if (getDirectInviteTargetUserId(room, ownUserId) !== targetUserId) {
+                return false;
+            }
+            return isRoomMappedDmCandidate(room, targetUserId, ownUserId);
+        }),
+    );
+
+    return hintedInviteRooms[0]?.roomId ?? null;
 }
 
 function intersectMappedRoomIds(content: MDirectContent, targetUserIds: string[]): string[] {
@@ -310,6 +336,7 @@ export function getDirectRoomIds(client: MatrixClient): Set<string> {
     const sanitized = patchSelfMappedDirectRooms(client, sanitizeMDirectContent(rawContent));
     const roomIds = new Set<string>();
     const spaceChildRoomIds = buildSpaceChildRoomIdSet(client);
+    const ownUserId = client.getUserId() ?? "";
 
     for (const mapped of Object.values(sanitized)) {
         for (const roomId of mapped) {
@@ -322,6 +349,28 @@ export function getDirectRoomIds(client: MatrixClient): Set<string> {
             }
             roomIds.add(roomId);
         }
+    }
+
+    for (const room of client.getRooms()) {
+        if (roomIds.has(room.roomId) || room.isSpaceRoom()) {
+            continue;
+        }
+        if (room.getMyMembership() !== "invite") {
+            continue;
+        }
+        if (spaceChildRoomIds.has(room.roomId) || hasSpaceParent(room)) {
+            continue;
+        }
+
+        const inviteTargetUserId = getDirectInviteTargetUserId(room, ownUserId);
+        if (!inviteTargetUserId) {
+            continue;
+        }
+        if (!isRoomMappedDmCandidate(room, inviteTargetUserId, ownUserId)) {
+            continue;
+        }
+
+        roomIds.add(room.roomId);
     }
 
     return roomIds;

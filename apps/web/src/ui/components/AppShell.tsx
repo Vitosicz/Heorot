@@ -12,7 +12,7 @@ import {
     type Room,
 } from "matrix-js-sdk/src/matrix";
 
-import { getDirectRoomIds } from "../adapters/dmAdapter";
+import { ensureDirectRoomMapping, getDirectRoomIds } from "../adapters/dmAdapter";
 import { describeJoinError, joinRoomWithRetry } from "../adapters/joinAdapter";
 import { mediaFromMxc, thumbnailFromMxc } from "../adapters/media";
 import { Composer } from "./Composer";
@@ -978,6 +978,51 @@ export function AppShell({ client, onLogout }: AppShellProps): React.ReactElemen
         () => getDirectRoomIds(client),
         [client, rooms],
     );
+
+    useEffect(() => {
+        if (client.isGuest()) {
+            return;
+        }
+
+        const ownUserId = client.getUserId() ?? "";
+        if (!ownUserId) {
+            return;
+        }
+
+        const hintedDirectInvites = rooms
+            .filter((room) => !room.isSpaceRoom() && room.getMyMembership() === "invite")
+            .flatMap((room) => {
+                const inviterUserId = (room as Room & { getDMInviter?: () => string | undefined }).getDMInviter?.();
+                if (typeof inviterUserId !== "string" || inviterUserId.length === 0 || inviterUserId === ownUserId) {
+                    return [];
+                }
+
+                return [{ roomId: room.roomId, inviterUserId }];
+            });
+
+        if (hintedDirectInvites.length === 0) {
+            return;
+        }
+
+        let cancelled = false;
+        void (async () => {
+            for (const inviteHint of hintedDirectInvites) {
+                if (cancelled) {
+                    return;
+                }
+
+                try {
+                    await ensureDirectRoomMapping(client, inviteHint.roomId, inviteHint.inviterUserId);
+                } catch {
+                    // best-effort mapping to keep DM invites visible and stable
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [client, rooms]);
     const roomById = useMemo(
         () => new Map(visibleRooms.map((room) => [room.roomId, room])),
         [visibleRooms],

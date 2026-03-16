@@ -14,7 +14,7 @@
     "build:electron": "tsc -p tsconfig.json",
     "build": "npm run build:web && npm run build:electron",
     "start": "npm run build && electron .",
-    "dist": "npm run build && electron-builder --config electron-builder.json",
+    "dist": "node ./scripts/dist-with-version.mjs",
     "dist:linux": "npm run build && electron-builder --config electron-builder.json --linux AppImage",
     "dist:mac": "npm run dist:mac:universal:unsigned",
     "dist:mac:x64:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.mac-unsigned.json --publish never -m dmg zip --x64",

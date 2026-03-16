@@ -50,6 +50,7 @@ function makeRoom(options: {
     targetUserId?: string;
     extraUserIds?: string[];
     myMembership?: string;
+    dmInviterUserId?: string;
 }) {
     const ownMembership = options.myMembership ?? "join";
     const members = [makeMember(options.ownUserId, ownMembership)];
@@ -66,6 +67,7 @@ function makeRoom(options: {
         roomId: options.roomId,
         isSpaceRoom: () => false,
         getMyMembership: () => ownMembership,
+        getDMInviter: () => options.dmInviterUserId,
         getMember: (userId: string) => members.find((member) => member.userId === userId) ?? null,
         currentState: {
             getMembers: () => members,
@@ -109,6 +111,25 @@ describe("dmAdapter", () => {
         expect([...roomIds].sort((left, right) => left.localeCompare(right))).toEqual(["!a:hs", "!b:hs"]);
     });
 
+    it("getDirectRoomIds includes direct invites hinted by getDMInviter even without m.direct", () => {
+        const ownUserId = "@me:example.org";
+        const targetUserId = "@alice:example.org";
+        const room = makeRoom({
+            roomId: "!invite-dm:hs",
+            ownUserId,
+            targetUserId,
+            myMembership: "invite",
+            dmInviterUserId: targetUserId,
+        });
+
+        const client = makeClient({ ownUserId, directContent: {} });
+        (client as any).getRooms = () => [room];
+        (client as any).getRoom = (roomId: string) => (roomId === room.roomId ? room : null);
+
+        const roomIds = getDirectRoomIds(client as any);
+        expect(roomIds.has(room.roomId)).toBe(true);
+    });
+
     it("findExistingDirectRoomId does not fallback to arbitrary rooms outside m.direct", () => {
         const ownUserId = "@me:example.org";
         const targetUserId = "@alice:example.org";
@@ -123,6 +144,24 @@ describe("dmAdapter", () => {
         (client as any).getRoom = () => room;
 
         expect(findExistingDirectRoomId(client as any, targetUserId)).toBeNull();
+    });
+
+    it("findExistingDirectRoomId reuses direct invite hinted by getDMInviter", () => {
+        const ownUserId = "@me:example.org";
+        const targetUserId = "@alice:example.org";
+        const inviteRoom = makeRoom({
+            roomId: "!invite-dm:hs",
+            ownUserId,
+            targetUserId,
+            myMembership: "invite",
+            dmInviterUserId: targetUserId,
+        });
+
+        const client = makeClient({ ownUserId, directContent: {} });
+        (client as any).getRooms = () => [inviteRoom];
+        (client as any).getRoom = (roomId: string) => (roomId === inviteRoom.roomId ? inviteRoom : null);
+
+        expect(findExistingDirectRoomId(client as any, targetUserId)).toBe(inviteRoom.roomId);
     });
 
     it("findExistingDirectRoomId ignores mapped rooms that are not 1:1 DMs", () => {
