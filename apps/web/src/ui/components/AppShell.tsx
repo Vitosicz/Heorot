@@ -1203,10 +1203,21 @@ export function AppShell({ client, onLogout }: AppShellProps): React.ReactElemen
             return;
         }
 
-        if (!activeRoomId || !channels.some((room) => room.roomId === activeRoomId)) {
+        if (!activeRoomId) {
+            openRoomAtBottom(channels[0].roomId);
+            return;
+        }
+
+        if (!channels.some((room) => room.roomId === activeRoomId)) {
+            const selectedSpaceIsPeople = selectedSpaceId === PEOPLE_SPACE_ID;
+            const activeRoomIsDirect = directRoomIds.has(activeRoomId);
+            if (selectedSpaceIsPeople && activeRoomIsDirect) {
+                return;
+            }
+
             openRoomAtBottom(channels[0].roomId);
         }
-    }, [activeRoomId, channels, openRoomAtBottom, pendingFocusRoomId]);
+    }, [activeRoomId, channels, directRoomIds, openRoomAtBottom, pendingFocusRoomId, selectedSpaceId]);
 
     useEffect(() => {
         setReplyToEvent(null);
@@ -1533,6 +1544,7 @@ export function AppShell({ client, onLogout }: AppShellProps): React.ReactElemen
 
     const selectChannel = useCallback(
         (roomId: string): void => {
+            setPendingFocusRoomId(null);
             openRoomAtBottom(roomId);
             const room = roomById.get(roomId) ?? client.getRoom(roomId);
             if (!room || !isRoomVoiceChannel(room)) {
@@ -2197,6 +2209,7 @@ export function AppShell({ client, onLogout }: AppShellProps): React.ReactElemen
                 onResolved={({ roomId, created, isGroup, targetCount }) => {
                     setCreateDirectChatOpen(false);
                     focusRoom(roomId);
+                    setPendingFocusRoomId(roomId);
                     pushToast({
                         type: "success",
                         message: isGroup

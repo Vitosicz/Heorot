@@ -158,7 +158,7 @@ function isDirectContentEqual(left: MDirectContent, right: MDirectContent): bool
     return JSON.stringify(toComparableShape(left)) === JSON.stringify(toComparableShape(right));
 }
 
-function isRoomMappedDmCandidate(room: Room, targetUserId: string): boolean {
+function isRoomMappedDmCandidate(room: Room, targetUserId: string, ownUserId: string): boolean {
     if (room.isSpaceRoom()) {
         return false;
     }
@@ -169,11 +169,7 @@ function isRoomMappedDmCandidate(room: Room, targetUserId: string): boolean {
     }
 
     const targetMember = room.getMember(targetUserId);
-    return Boolean(targetMember && isActiveMembership(targetMember.membership));
-}
-
-function isRoomUsableAsDmFallback(room: Room, targetUserId: string, ownUserId: string): boolean {
-    if (!isRoomMappedDmCandidate(room, targetUserId)) {
+    if (!targetMember || !isActiveMembership(targetMember.membership)) {
         return false;
     }
 
@@ -221,6 +217,11 @@ function hasSpaceParent(room: Room): boolean {
 }
 
 function findMappedDirectRoomId(client: MatrixClient, targetUserId: string): string | null {
+    const ownUserId = client.getUserId();
+    if (!ownUserId) {
+        return null;
+    }
+
     const rawDirectContent = client.getAccountData(EventType.Direct)?.getContent();
     const sanitized = patchSelfMappedDirectRooms(client, sanitizeMDirectContent(rawDirectContent));
     const mappedRoomIds = sanitized[targetUserId];
@@ -232,19 +233,10 @@ function findMappedDirectRoomId(client: MatrixClient, targetUserId: string): str
         mappedRoomIds
             .map((roomId) => client.getRoom(roomId))
             .filter((room): room is Room => Boolean(room))
-            .filter((room) => isRoomMappedDmCandidate(room, targetUserId)),
+            .filter((room) => isRoomMappedDmCandidate(room, targetUserId, ownUserId)),
     );
 
     return mappedRooms[0]?.roomId ?? null;
-}
-
-function findFallbackDirectRoomId(client: MatrixClient, targetUserId: string, ownUserId: string): string | null {
-    const candidates = sortRoomsByActivity(
-        client
-            .getRooms()
-            .filter((room) => isRoomUsableAsDmFallback(room, targetUserId, ownUserId)),
-    );
-    return candidates[0]?.roomId ?? null;
 }
 
 function intersectMappedRoomIds(content: MDirectContent, targetUserIds: string[]): string[] {
@@ -291,10 +283,6 @@ function isRoomMappedGroupCandidate(room: Room, targetUserIds: string[], ownUser
     return activeMembers.every((member) => targetSet.has(member.userId));
 }
 
-function isRoomUsableAsGroupDmFallback(room: Room, targetUserIds: string[], ownUserId: string): boolean {
-    return isRoomMappedGroupCandidate(room, targetUserIds, ownUserId);
-}
-
 function findMappedDirectGroupRoomId(client: MatrixClient, targetUserIds: string[], ownUserId: string): string | null {
     const rawDirectContent = client.getAccountData(EventType.Direct)?.getContent();
     const sanitized = patchSelfMappedDirectRooms(client, sanitizeMDirectContent(rawDirectContent));
@@ -311,15 +299,6 @@ function findMappedDirectGroupRoomId(client: MatrixClient, targetUserIds: string
     );
 
     return mappedRooms[0]?.roomId ?? null;
-}
-
-function findFallbackDirectGroupRoomId(client: MatrixClient, targetUserIds: string[], ownUserId: string): string | null {
-    const candidates = sortRoomsByActivity(
-        client
-            .getRooms()
-            .filter((room) => isRoomUsableAsGroupDmFallback(room, targetUserIds, ownUserId)),
-    );
-    return candidates[0]?.roomId ?? null;
 }
 
 export function isValidMatrixUserId(userId: string): boolean {
@@ -349,12 +328,7 @@ export function getDirectRoomIds(client: MatrixClient): Set<string> {
 }
 
 export function findExistingDirectRoomId(client: MatrixClient, targetUserId: string): string | null {
-    const ownUserId = client.getUserId();
-    if (!ownUserId) {
-        return null;
-    }
-
-    return findMappedDirectRoomId(client, targetUserId) ?? findFallbackDirectRoomId(client, targetUserId, ownUserId);
+    return findMappedDirectRoomId(client, targetUserId);
 }
 
 export function findExistingDirectGroupRoomId(client: MatrixClient, targetUserIds: string[]): string | null {
@@ -368,8 +342,7 @@ export function findExistingDirectGroupRoomId(client: MatrixClient, targetUserId
         return null;
     }
 
-    return findMappedDirectGroupRoomId(client, normalizedTargets, ownUserId) ??
-        findFallbackDirectGroupRoomId(client, normalizedTargets, ownUserId);
+    return findMappedDirectGroupRoomId(client, normalizedTargets, ownUserId);
 }
 
 export async function ensureDirectRoomMapping(
@@ -437,7 +410,7 @@ export async function createOrReuseDirectChat(
 
     const existingRoomId = findExistingDirectRoomId(client, trimmedTarget);
     if (existingRoomId) {
-        await ensureDirectRoomMappings(client, existingRoomId, [trimmedTarget]).catch(() => undefined);
+        await ensureDirectRoomMappings(client, existingRoomId, [trimmedTarget]);
         return { roomId: existingRoomId, created: false };
     }
 
@@ -447,7 +420,7 @@ export async function createOrReuseDirectChat(
         preset: Preset.TrustedPrivateChat,
     } as any);
 
-    await ensureDirectRoomMappings(client, response.room_id, [trimmedTarget]).catch(() => undefined);
+    await ensureDirectRoomMappings(client, response.room_id, [trimmedTarget]);
     return { roomId: response.room_id, created: true };
 }
 
@@ -462,7 +435,7 @@ export async function createOrReuseDirectGroupChat(
 
     const existingRoomId = findExistingDirectGroupRoomId(client, targets);
     if (existingRoomId) {
-        await ensureDirectRoomMappings(client, existingRoomId, targets, { replaceExisting: false }).catch(() => undefined);
+        await ensureDirectRoomMappings(client, existingRoomId, targets, { replaceExisting: false });
         return { roomId: existingRoomId, created: false };
     }
 
@@ -471,6 +444,6 @@ export async function createOrReuseDirectGroupChat(
         preset: Preset.PrivateChat,
     } as any);
 
-    await ensureDirectRoomMappings(client, response.room_id, targets, { replaceExisting: false }).catch(() => undefined);
+    await ensureDirectRoomMappings(client, response.room_id, targets, { replaceExisting: false });
     return { roomId: response.room_id, created: true };
 }

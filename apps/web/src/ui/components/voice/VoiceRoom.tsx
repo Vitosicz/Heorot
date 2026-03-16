@@ -89,6 +89,11 @@ const VOICE_JOIN_RETRY_BASE_DELAY_MS = 350;
 const VOICE_JOIN_RETRY_MAX_DELAY_MS = 3_500;
 const VOICE_JOIN_RETRY_BUDGET_MS = 25_000;
 const STREAM_SYSTEM_AUDIO_STORAGE_KEY = "heorot.voice.stream_system_audio.v1";
+const PARTICIPANT_VOLUME_STORAGE_KEY_PREFIX = "heorot.voice.participant_volume.v1";
+const PARTICIPANT_VOLUME_DEFAULT_PERCENT = 100;
+const PARTICIPANT_VOLUME_MIN_PERCENT = 0;
+const PARTICIPANT_VOLUME_MAX_PERCENT = 100;
+type ParticipantVolumeMap = Record<string, number>;
 
 type ScreenShareQualityProfileId = "720p30" | "1080p30" | "1080p60" | "1440p60";
 
@@ -371,6 +376,75 @@ function getScreenShareQualityProfile(profileId: ScreenShareQualityProfileId): S
     return SCREEN_SHARE_QUALITY_PROFILES.find((profile) => profile.id === profileId) ?? SCREEN_SHARE_QUALITY_PROFILES[0];
 }
 
+function getParticipantVolumeStorageKey(ownUserId: string | undefined, roomId: string): string {
+    const encodedOwner = encodeURIComponent(ownUserId && ownUserId.length > 0 ? ownUserId : "anonymous");
+    const encodedRoom = encodeURIComponent(roomId);
+    return PARTICIPANT_VOLUME_STORAGE_KEY_PREFIX + "::" + encodedOwner + "::" + encodedRoom;
+}
+
+function clampParticipantVolumePercent(rawValue: number): number {
+    if (!Number.isFinite(rawValue)) {
+        return PARTICIPANT_VOLUME_DEFAULT_PERCENT;
+    }
+    return Math.min(PARTICIPANT_VOLUME_MAX_PERCENT, Math.max(PARTICIPANT_VOLUME_MIN_PERCENT, Math.round(rawValue)));
+}
+
+function normalizeParticipantVolumeMap(rawValue: unknown): ParticipantVolumeMap {
+    if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) {
+        return {};
+    }
+
+    const normalized: ParticipantVolumeMap = {};
+    for (const [participantKey, value] of Object.entries(rawValue)) {
+        if (participantKey.length === 0 || typeof value !== "number" || !Number.isFinite(value)) {
+            continue;
+        }
+
+        const normalizedValue = clampParticipantVolumePercent(value);
+        if (normalizedValue !== PARTICIPANT_VOLUME_DEFAULT_PERCENT) {
+            normalized[participantKey] = normalizedValue;
+        }
+    }
+
+    return normalized;
+}
+
+function loadParticipantVolumeMap(storageKey: string): ParticipantVolumeMap {
+    if (typeof window === "undefined") {
+        return {};
+    }
+
+    try {
+        const rawJson = window.localStorage.getItem(storageKey);
+        if (!rawJson) {
+            return {};
+        }
+        return normalizeParticipantVolumeMap(JSON.parse(rawJson));
+    } catch {
+        return {};
+    }
+}
+
+function saveParticipantVolumeMap(storageKey: string, participantVolumeMap: ParticipantVolumeMap): void {
+    if (typeof window === "undefined") {
+        return;
+    }
+
+    try {
+        if (Object.keys(participantVolumeMap).length === 0) {
+            window.localStorage.removeItem(storageKey);
+            return;
+        }
+        window.localStorage.setItem(storageKey, JSON.stringify(participantVolumeMap));
+    } catch {
+        // ignore persistence failures
+    }
+}
+
+function resolveVolumeParticipantKey(matrixUserId: string | undefined, identity: string): string {
+    return matrixUserId && matrixUserId.trim().length > 0 ? matrixUserId.trim() : identity;
+}
+
 function loadStreamSystemAudioPreference(): boolean {
     if (typeof window === "undefined") {
         return false;
@@ -456,6 +530,7 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
     ref,
 ): React.ReactElement {
     const { config } = useMatrix();
+    const ownUserId = client.getUserId() ?? undefined;
     const roomRef = useRef<Room | null>(null);
     const connectedRoomIdRef = useRef<string | null>(null);
     const joinAbortControllerRef = useRef<AbortController | null>(null);
@@ -490,6 +565,7 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
         DEFAULT_SCREEN_SHARE_QUALITY_PROFILE_ID,
     );
     const [streamSystemAudioEnabled, setStreamSystemAudioEnabled] = useState<boolean>(() => loadStreamSystemAudioPreference());
+    const [participantVolumeByUserKey, setParticipantVolumeByUserKey] = useState<ParticipantVolumeMap>({});
     const [stageFullscreen, setStageFullscreen] = useState(false);
     const [desktopCaptureDialogOpen, setDesktopCaptureDialogOpen] = useState(false);
     const [desktopCaptureSources, setDesktopCaptureSources] = useState<DesktopCaptureSource[]>([]);
@@ -512,6 +588,10 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
             audioSettings.micProfile,
             audioSettings.preferredAudioInputId,
         ],
+    );
+    const participantVolumeStorageKey = useMemo(
+        () => getParticipantVolumeStorageKey(ownUserId, matrixRoomId),
+        [matrixRoomId, ownUserId],
     );
 
     const refreshDevices = async (): Promise<void> => {
@@ -794,6 +874,22 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
     }, [audioMuted, screenShareAudioMuted]);
 
     useEffect(() => {
+        setParticipantVolumeByUserKey(loadParticipantVolumeMap(participantVolumeStorageKey));
+    }, [participantVolumeStorageKey]);
+
+    useEffect(() => {
+        saveParticipantVolumeMap(participantVolumeStorageKey, participantVolumeByUserKey);
+    }, [participantVolumeByUserKey, participantVolumeStorageKey]);
+
+    useEffect(() => {
+        for (const audioElement of remoteAudioElementsByTrackSidRef.current.values()) {
+            const participantKey = audioElement.dataset.voiceParticipantKey || "";
+            const volumePercent = participantVolumeByUserKey[participantKey] ?? PARTICIPANT_VOLUME_DEFAULT_PERCENT;
+            audioElement.volume = volumePercent / 100;
+        }
+    }, [participantVolumeByUserKey]);
+
+    useEffect(() => {
         const handleFullscreenChange = (): void => {
             setStageFullscreen(document.fullscreenElement === stageVideoWrapRef.current);
         };
@@ -941,11 +1037,11 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
                     }
                     refreshAudioDiagnostics(room);
                 })
-                .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: RemoteTrackPublication) => {
+                .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
                     if (!isCurrentJoinRequest()) {
                         return;
                     }
-                    attachRemoteAudioTrack(track, publication);
+                    attachRemoteAudioTrack(track, publication, participant);
                     if (track.kind === Track.Kind.Audio) {
                     }
                     if (
@@ -1283,7 +1379,38 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
         setMicTrackSettingsSummary(micSummaryParts.length > 0 ? micSummaryParts.join(" | ") : null);
     };
 
-    const attachRemoteAudioTrack = (track: RemoteTrack, publication: RemoteTrackPublication): void => {
+    const getParticipantVolumePercent = useCallback(
+        (participantKey: string): number => participantVolumeByUserKey[participantKey] ?? PARTICIPANT_VOLUME_DEFAULT_PERCENT,
+        [participantVolumeByUserKey],
+    );
+
+    const setParticipantVolumePercent = useCallback((participantKey: string, rawVolumePercent: number): void => {
+        const normalizedVolumePercent = clampParticipantVolumePercent(rawVolumePercent);
+
+        setParticipantVolumeByUserKey((current) => {
+            const currentVolumePercent = current[participantKey] ?? PARTICIPANT_VOLUME_DEFAULT_PERCENT;
+            if (currentVolumePercent === normalizedVolumePercent) {
+                return current;
+            }
+
+            const next: ParticipantVolumeMap = { ...current };
+            if (normalizedVolumePercent === PARTICIPANT_VOLUME_DEFAULT_PERCENT) {
+                delete next[participantKey];
+            } else {
+                next[participantKey] = normalizedVolumePercent;
+            }
+            return next;
+        });
+
+        for (const audioElement of remoteAudioElementsByTrackSidRef.current.values()) {
+            if (audioElement.dataset.voiceParticipantKey !== participantKey) {
+                continue;
+            }
+            audioElement.volume = normalizedVolumePercent / 100;
+        }
+    }, []);
+
+    const attachRemoteAudioTrack = (track: RemoteTrack, publication: RemoteTrackPublication, participant?: RemoteParticipant): void => {
         if (track.kind !== Track.Kind.Audio) {
             return;
         }
@@ -1300,6 +1427,11 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
             return;
         }
 
+        const participantMatrixUserId = participant ? resolveParticipantMatrixUserId(participant) : undefined;
+        const participantIdentity = participant?.identity ?? trackSid;
+        const participantVolumeKey = resolveVolumeParticipantKey(participantMatrixUserId, participantIdentity);
+        const participantVolumePercent = getParticipantVolumePercent(participantVolumeKey);
+
         const element = track.attach();
         if (!(element instanceof HTMLAudioElement)) {
             element.remove();
@@ -1309,8 +1441,9 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
         element.autoplay = true;
         element.setAttribute("playsinline", "true");
         element.muted = audioMuted || (isScreenShareAudio && screenShareAudioMuted);
-        element.volume = 1;
+        element.volume = participantVolumePercent / 100;
         element.dataset.lkTrackSid = trackSid;
+        element.dataset.voiceParticipantKey = participantVolumeKey;
         audioSinkRef.current?.appendChild(element);
         remoteAudioElementsByTrackSidRef.current.set(trackSid, element);
 
@@ -1358,6 +1491,7 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
                             attachRemoteAudioTrack(
                                 publication.track as RemoteTrack,
                                 publication as RemoteTrackPublication,
+                                participant,
                             );
                         }
                     }
@@ -1390,7 +1524,7 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
                 if (!publication.track) {
                     continue;
                 }
-                attachRemoteAudioTrack(publication.track, publication);
+                attachRemoteAudioTrack(publication.track, publication, participant);
             }
         }
         if (hasScreenSharePublication) {
@@ -1608,7 +1742,6 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
 
     const connected = connectionState === ConnectionState.Connected;
 
-    const ownUserId = client.getUserId() ?? undefined;
     const ownUser = ownUserId ? client.getUser(ownUserId) ?? undefined : undefined;
     const ownDisplayName = ownUser?.displayName ?? ownUserId ?? "You";
     const activeScreenShareParticipant = screenShareParticipants.find(
@@ -1804,6 +1937,8 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
                             const avatarSrc = info.avatarMxc
                                 ? (client.mxcUrlToHttp(info.avatarMxc, 240, 240, "crop") ?? null)
                                 : null;
+                            const participantVolumeKey = resolveVolumeParticipantKey(p.matrixUserId, p.identity);
+                            const participantVolumePercent = getParticipantVolumePercent(participantVolumeKey);
                             return (
                                 <li
                                     key={p.identity}
@@ -1836,6 +1971,23 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
                                         <span />
                                         <span />
                                     </span>
+                                    {!isYou ? (
+                                        <label className="voice-room-participant-volume">
+                                            <span className="voice-room-participant-volume-label">Volume</span>
+                                            <input
+                                                className="voice-room-participant-volume-slider"
+                                                type="range"
+                                                min={PARTICIPANT_VOLUME_MIN_PERCENT}
+                                                max={PARTICIPANT_VOLUME_MAX_PERCENT}
+                                                step={5}
+                                                value={participantVolumePercent}
+                                                onChange={(event) =>
+                                                    setParticipantVolumePercent(participantVolumeKey, Number(event.target.value))
+                                                }
+                                            />
+                                            <span className="voice-room-participant-volume-value">{participantVolumePercent}%</span>
+                                        </label>
+                                    ) : null}
                                 </li>
                             );
                         })}

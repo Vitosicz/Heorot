@@ -4070,6 +4070,33 @@ img.voice-ctrl-icon {
     padding: 5px 8px;
 }
 
+.voice-room-participant-volume {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.voice-room-participant-volume-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.voice-room-participant-volume-slider {
+    flex: 1;
+    accent-color: var(--accent);
+}
+
+.voice-room-participant-volume-value {
+    min-width: 40px;
+    text-align: right;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
 .voice-room-speaking-bars {
     display: inline-flex;
     align-items: flex-end;
