@@ -144,17 +144,33 @@ function hasMatrixEmoticonMarker(element: HTMLElement): boolean {
 
 function handleSanitizedImageError(event: React.SyntheticEvent<HTMLImageElement>): void {
     const image = event.currentTarget;
-    if (image.dataset.heorotFallbackApplied === "1") {
+    if (image.dataset.heorotRetryAttempted === "1") {
         return;
     }
+
+    const currentSource = image.currentSrc || image.src;
+    if (!currentSource) {
+        return;
+    }
+
+    const withCacheBuster = (url: string): string => {
+        const hashIndex = url.indexOf("#");
+        const hash = hashIndex >= 0 ? url.slice(hashIndex) : "";
+        const baseUrl = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+        const separator = baseUrl.includes("?") ? "&" : "?";
+        return `${baseUrl}${separator}__heorot_retry=${Date.now()}${hash}`;
+    };
 
     const fallbackSource = image.dataset.heorotFallbackSrc;
-    if (!fallbackSource || fallbackSource === image.currentSrc || fallbackSource === image.src) {
+    image.dataset.heorotRetryAttempted = "1";
+
+    if (fallbackSource && fallbackSource !== currentSource) {
+        image.dataset.heorotFallbackApplied = "1";
+        image.src = withCacheBuster(fallbackSource);
         return;
     }
 
-    image.dataset.heorotFallbackApplied = "1";
-    image.src = fallbackSource;
+    image.src = withCacheBuster(currentSource);
 }
 
 function sanitizeNodes(

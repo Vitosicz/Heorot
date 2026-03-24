@@ -7,6 +7,10 @@ const DB_VERSION = 1;
 const SERVER_SUPPORT_TTL_MS = 2 * 60 * 60 * 1000;
 const V3_MEDIA_PATH_PREFIX = "/_matrix/media/v3/";
 const AUTH_MEDIA_PATH_PREFIX = "/_matrix/client/v1/media/";
+const V3_DOWNLOAD_PATH_PREFIX = "/_matrix/media/v3/download";
+const V3_THUMBNAIL_PATH_PREFIX = "/_matrix/media/v3/thumbnail";
+const AUTH_DOWNLOAD_PATH_PREFIX = "/_matrix/client/v1/media/download";
+const AUTH_THUMBNAIL_PATH_PREFIX = "/_matrix/client/v1/media/thumbnail";
 
 const serverSupportMap = {};
 let dbPromise;
@@ -32,13 +36,39 @@ function setCachedUserInfo(candidate) {
     return cachedUserInfo;
 }
 
-self.addEventListener("message", (event) => {
-    const expectedOrigin = self.location?.origin;
-    if (typeof expectedOrigin !== "string" || expectedOrigin.length === 0) {
-        return;
+function safeResolveOrigin(url) {
+    if (typeof url !== "string" || url.length === 0) {
+        return null;
     }
 
-    if (typeof event?.origin !== "string" || event.origin !== expectedOrigin) {
+    try {
+        return new URL(url).origin;
+    } catch {
+        return null;
+    }
+}
+
+function isTrustedMessageEvent(event) {
+    const expectedOrigin = self.location?.origin;
+    if (typeof expectedOrigin !== "string" || expectedOrigin.length === 0) {
+        return false;
+    }
+
+    const eventOrigin = typeof event?.origin === "string" ? event.origin : "";
+    if (eventOrigin !== expectedOrigin) {
+        return false;
+    }
+
+    const sourceOrigin = safeResolveOrigin(event?.source?.url);
+    if (sourceOrigin !== null && sourceOrigin !== expectedOrigin) {
+        return false;
+    }
+
+    return true;
+}
+
+self.addEventListener("message", (event) => {
+    if (!isTrustedMessageEvent(event)) {
         return;
     }
 
@@ -63,7 +93,12 @@ self.addEventListener("fetch", (event) => {
     }
 
     const url = new URL(event.request.url);
-    if (!url.pathname.startsWith("/_matrix/media/v3/download") && !url.pathname.startsWith("/_matrix/media/v3/thumbnail")) {
+    if (
+        !url.pathname.startsWith(V3_DOWNLOAD_PATH_PREFIX) &&
+        !url.pathname.startsWith(V3_THUMBNAIL_PATH_PREFIX) &&
+        !url.pathname.startsWith(AUTH_DOWNLOAD_PATH_PREFIX) &&
+        !url.pathname.startsWith(AUTH_THUMBNAIL_PATH_PREFIX)
+    ) {
         return;
     }
 
@@ -72,6 +107,8 @@ self.addEventListener("fetch", (event) => {
 
 async function handleMediaRequest(event, url) {
     let authData;
+    let supportsAuthenticatedMedia = false;
+    const requestUrl = new URL(url.toString());
 
     try {
         const clientApi = url.origin;
@@ -82,25 +119,29 @@ async function handleMediaRequest(event, url) {
         authData = await getAuthData(client);
         const homeserverOrigin = new URL(authData.homeserver).origin;
 
-        if (url.origin !== homeserverOrigin) {
+        if (requestUrl.origin !== homeserverOrigin) {
             throw new Error("Media request origin does not match homeserver origin");
         }
-
-        await tryUpdateServerSupportMap(clientApi, authData.accessToken);
-
-        const serverSupport = serverSupportMap[clientApi];
-        const supportsAuthenticatedMedia = Boolean(serverSupport && serverSupport.supportsAuthedMedia);
-        if (supportsAuthenticatedMedia && authData.accessToken) {
-            if (url.pathname.startsWith(V3_MEDIA_PATH_PREFIX)) {
-                url.pathname = `${AUTH_MEDIA_PATH_PREFIX}${url.pathname.slice(V3_MEDIA_PATH_PREFIX.length)}`;
-            }
+        try {
+            await tryUpdateServerSupportMap(clientApi, authData.accessToken);
+            const serverSupport = serverSupportMap[clientApi];
+            supportsAuthenticatedMedia = Boolean(serverSupport && serverSupport.supportsAuthedMedia);
+        } catch (versionProbeError) {
+            console.warn("SW: Unable to refresh homeserver media capability, continuing with current request.", versionProbeError);
         }
     } catch (error) {
-        authData = undefined;
-        console.error("SW: Error in request rewrite.", error);
+        console.error("SW: Error resolving auth data for media request.", error);
     }
 
-    return fetch(url, fetchConfigForToken(authData && authData.accessToken));
+    if (supportsAuthenticatedMedia) {
+        if (requestUrl.pathname.startsWith(V3_MEDIA_PATH_PREFIX)) {
+            requestUrl.pathname = `${AUTH_MEDIA_PATH_PREFIX}${requestUrl.pathname.slice(V3_MEDIA_PATH_PREFIX.length)}`;
+        }
+    } else if (requestUrl.pathname.startsWith(AUTH_MEDIA_PATH_PREFIX)) {
+        requestUrl.pathname = `${V3_MEDIA_PATH_PREFIX}${requestUrl.pathname.slice(AUTH_MEDIA_PATH_PREFIX.length)}`;
+    }
+
+    return fetch(requestUrl, fetchConfigForToken(authData?.accessToken));
 }
 
 async function tryUpdateServerSupportMap(origin, accessToken) {
@@ -190,13 +231,7 @@ async function getAuthData(client) {
 async function askClientForUserInfo(client) {
     return await new Promise((resolve, reject) => {
         const responseKey = generateResponseKey();
-        const clientOrigin = (() => {
-            try {
-                return new URL(client.url).origin;
-            } catch {
-                return null;
-            }
-        })();
+        const clientOrigin = safeResolveOrigin(client.url);
         if (!clientOrigin) {
             reject(new Error("Unable to resolve client origin"));
             return;
@@ -205,10 +240,14 @@ async function askClientForUserInfo(client) {
         const timeoutId = setTimeout(() => {
             self.removeEventListener("message", onMessage);
             reject(new Error("Timed out waiting for user info"));
-        }, 1000);
+        }, 3000);
 
         const onMessage = (event) => {
-            if (typeof event?.origin !== "string" || event.origin !== clientOrigin) {
+            if (!isTrustedMessageEvent(event)) {
+                return;
+            }
+
+            if (event.origin !== clientOrigin) {
                 return;
             }
 

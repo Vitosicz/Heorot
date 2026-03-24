@@ -1214,6 +1214,7 @@ export function Timeline({
     const decryptCacheAccessRef = useRef<Map<string, number>>(new Map());
     const decryptFailureReasonRef = useRef<Record<string, string>>({});
     const decryptAbortControllersRef = useRef<Record<string, AbortController>>({});
+    const decryptSessionIdRef = useRef(0);
     const lastViewportEnqueueAtRef = useRef(0);
     const linkPreviewByUrlRef = useRef<Record<string, UrlPreviewData | null>>({});
     const inFlightLinkPreviewUrlsRef = useRef<Set<string>>(new Set());
@@ -1456,8 +1457,6 @@ export function Timeline({
     }, [activeSpaceId, client, room]);
 
     useEffect(() => {
-        let cancelled = false;
-
         const evictDecryptedMediaCacheIfNeeded = (): void => {
             const accessMap = decryptCacheAccessRef.current;
             while (accessMap.size > decryptTuning.maxCacheEntries) {
@@ -1503,6 +1502,7 @@ export function Timeline({
 
         const decryptMedia = async (item: DecryptQueueItem): Promise<void> => {
             const { key, encryptedFile, mimeType } = item;
+            const sessionId = decryptSessionIdRef.current;
             const abortController = new AbortController();
             decryptAbortControllersRef.current[key] = abortController;
             let sourceUrl: string | null = null;
@@ -1524,7 +1524,7 @@ export function Timeline({
                 const decryptedData = await encrypt.decryptAttachment(encryptedData, encryptedFile);
                 const objectUrl = URL.createObjectURL(new Blob([decryptedData], { type: mimeType }));
 
-                if (cancelled) {
+                if (sessionId !== decryptSessionIdRef.current) {
                     URL.revokeObjectURL(objectUrl);
                     return;
                 }
@@ -1542,7 +1542,7 @@ export function Timeline({
                 if (error instanceof DOMException && error.name === "AbortError") {
                     return;
                 }
-                if (!cancelled) {
+                if (sessionId === decryptSessionIdRef.current) {
                     decryptedMediaUrlsRef.current[key] = null;
                     failedDecryptUntilRef.current[key] = Date.now() + decryptTuning.failureTtlMs;
                     decryptCacheAccessRef.current.delete(key);
@@ -1552,7 +1552,7 @@ export function Timeline({
                 activeDecryptCountRef.current = Math.max(0, activeDecryptCountRef.current - 1);
                 inFlightDecryptionsRef.current.delete(key);
                 delete decryptAbortControllersRef.current[key];
-                if (!cancelled) {
+                if (sessionId === decryptSessionIdRef.current) {
                     setDecryptRerenderTick((tick) => tick + 1);
                     pumpDecryptQueue();
                 }
@@ -1601,10 +1601,6 @@ export function Timeline({
         });
 
         function pumpDecryptQueue(): void {
-            if (cancelled) {
-                return;
-            }
-
             while (activeDecryptCountRef.current < decryptTuning.concurrency) {
                 const item = decryptQueueRef.current.shift();
                 if (!item) {
@@ -1623,10 +1619,6 @@ export function Timeline({
         }
 
         pumpDecryptQueue();
-
-        return () => {
-            cancelled = true;
-        };
     }, [client, decryptRerenderTick, decryptTuning, events]);
 
     useEffect(() => {
@@ -1684,6 +1676,7 @@ export function Timeline({
 
     useEffect(() => {
         return () => {
+            decryptSessionIdRef.current += 1;
             const decryptedUrls = Object.values(decryptedMediaUrlsRef.current);
             for (const url of decryptedUrls) {
                 if (typeof url === "string") {
