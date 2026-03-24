@@ -4077,6 +4077,35 @@ img.voice-ctrl-icon {
     gap: 8px;
 }
 
+.voice-room-participants-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.voice-room-participants-toolbar-note {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.voice-room-participants-toolbar-reset {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-main);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 8px;
+    cursor: pointer;
+}
+
+.voice-room-participants-toolbar-reset:hover {
+    border-color: var(--accent);
+}
+
 .voice-room-participant-volume-label {
     font-size: 11px;
     color: var(--text-muted);
@@ -4095,6 +4124,21 @@ img.voice-ctrl-icon {
     font-size: 11px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+}
+
+.voice-room-participant-volume-reset {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg-input);
+    color: var(--text-main);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 6px;
+    cursor: pointer;
+}
+
+.voice-room-participant-volume-reset:hover {
+    border-color: var(--accent);
 }
 
 .voice-room-speaking-bars {

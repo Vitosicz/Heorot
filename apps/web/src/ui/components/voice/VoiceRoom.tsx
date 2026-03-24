@@ -1410,6 +1410,25 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
         }
     }, []);
 
+    const resetParticipantVolume = useCallback(
+        (participantKey: string): void => {
+            setParticipantVolumePercent(participantKey, PARTICIPANT_VOLUME_DEFAULT_PERCENT);
+        },
+        [setParticipantVolumePercent],
+    );
+
+    const resetAllParticipantVolumes = useCallback((): void => {
+        setParticipantVolumeByUserKey({});
+        for (const audioElement of remoteAudioElementsByTrackSidRef.current.values()) {
+            audioElement.volume = PARTICIPANT_VOLUME_DEFAULT_PERCENT / 100;
+        }
+    }, []);
+
+    const hasCustomParticipantVolumes = useMemo(
+        () => Object.keys(participantVolumeByUserKey).length > 0,
+        [participantVolumeByUserKey],
+    );
+
     const attachRemoteAudioTrack = (track: RemoteTrack, publication: RemoteTrackPublication, participant?: RemoteParticipant): void => {
         if (track.kind !== Track.Kind.Audio) {
             return;
@@ -1924,7 +1943,22 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
 
                 {/* Participant tile grid */}
                 {connected ? (
-                    <ul className="voice-room-participants-list">
+                    <>
+                        <div className="voice-room-participants-toolbar">
+                            <p className="voice-room-participants-toolbar-note">
+                                Per-user volume is saved for this channel.
+                            </p>
+                            {hasCustomParticipantVolumes ? (
+                                <button
+                                    type="button"
+                                    className="voice-room-participants-toolbar-reset"
+                                    onClick={resetAllParticipantVolumes}
+                                >
+                                    Reset all volumes
+                                </button>
+                            ) : null}
+                        </div>
+                        <ul className="voice-room-participants-list">
                         {participants.map((p) => {
                             const info = getParticipantDisplayInfo(
                                 matrixRoom,
@@ -1983,13 +2017,23 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
                                                     setParticipantVolumePercent(participantVolumeKey, Number(event.target.value))
                                                 }
                                             />
+                                            {participantVolumePercent !== PARTICIPANT_VOLUME_DEFAULT_PERCENT ? (
+                                                <button
+                                                    type="button"
+                                                    className="voice-room-participant-volume-reset"
+                                                    onClick={() => resetParticipantVolume(participantVolumeKey)}
+                                                >
+                                                    Reset
+                                                </button>
+                                            ) : null}
                                             <span className="voice-room-participant-volume-value">{participantVolumePercent}%</span>
                                         </label>
                                     ) : null}
                                 </li>
                             );
                         })}
-                    </ul>
+                        </ul>
+                    </>
                 ) : (
                     <div className="voice-room-idle">
                         {joining ? (

@@ -267,6 +267,51 @@
     background: #1a2632;
 }
 
+.rs-notification-modes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.rs-notification-mode {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-main);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 8px 6px;
+    cursor: pointer;
+}
+
+.rs-notification-mode:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.rs-notification-mode.is-active {
+    border-color: var(--primary);
+    background: rgba(79, 163, 199, 0.2);
+    color: var(--text-main);
+}
+
+.rs-notification-mode:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.rs-notification-hint {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.rs-notification-error {
+    margin: 0;
+    color: #c35b5b;
+    font-size: 11px;
+}
+
 .rs-section-danger {
     margin-top: auto;
 }

@@ -1,6 +1,11 @@
-import React, { useMemo } from "react";
-import { EventType, type MatrixClient, type Room } from "matrix-js-sdk/src/matrix";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ClientEvent, EventType, type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk/src/matrix";
 import { getDirectRoomIds } from "../../../adapters/dmAdapter";
+import {
+    getRoomNotificationMode,
+    RoomNotificationMode,
+    setRoomNotificationMode,
+} from "../../../adapters/roomNotificationAdapter";
 
 interface InfoPanelProps {
     client: MatrixClient;
@@ -8,6 +13,26 @@ interface InfoPanelProps {
     onOpenRoomSettings: () => void;
     onCopyRoomLink: () => Promise<void>;
     onLeaveRoom: () => Promise<void>;
+}
+
+const ROOM_NOTIFICATION_MODE_OPTIONS: Array<{ mode: RoomNotificationMode; label: string }> = [
+    { mode: RoomNotificationMode.Default, label: "Default" },
+    { mode: RoomNotificationMode.AllMessages, label: "All messages" },
+    { mode: RoomNotificationMode.MentionsOnly, label: "Mentions only" },
+    { mode: RoomNotificationMode.Mute, label: "Mute" },
+];
+
+function roomNotificationModeSummary(mode: RoomNotificationMode): string {
+    switch (mode) {
+        case RoomNotificationMode.AllMessages:
+            return "All messages";
+        case RoomNotificationMode.MentionsOnly:
+            return "Mentions only";
+        case RoomNotificationMode.Mute:
+            return "Muted";
+        default:
+            return "Default";
+    }
 }
 
 function getRoomTopic(room: Room): string {
@@ -36,6 +61,52 @@ export function InfoPanel({
     const encrypted = isEncrypted(room);
     const dm = useMemo(() => isDirectMessage(client, room.roomId), [client, room.roomId]);
     const canEditTopic = Boolean(ownUserId && room.currentState.maySendStateEvent(EventType.RoomTopic, ownUserId));
+    const [notificationMode, setNotificationModeState] = useState<RoomNotificationMode>(RoomNotificationMode.Default);
+    const [notificationModePending, setNotificationModePending] = useState(false);
+    const [notificationModeError, setNotificationModeError] = useState<string | null>(null);
+
+    const refreshRoomNotificationMode = useCallback((): void => {
+        setNotificationModeState(getRoomNotificationMode(client, room.roomId));
+    }, [client, room.roomId]);
+
+    useEffect(() => {
+        refreshRoomNotificationMode();
+    }, [refreshRoomNotificationMode]);
+
+    useEffect(() => {
+        const onAccountData = (event: MatrixEvent): void => {
+            if (event.getType() !== EventType.PushRules) {
+                return;
+            }
+            refreshRoomNotificationMode();
+        };
+        client.on(ClientEvent.AccountData, onAccountData);
+        return () => {
+            client.removeListener(ClientEvent.AccountData, onAccountData);
+        };
+    }, [client, refreshRoomNotificationMode]);
+
+    const updateRoomNotificationMode = useCallback(
+        async (mode: RoomNotificationMode): Promise<void> => {
+            if (notificationModePending || mode === notificationMode) {
+                return;
+            }
+
+            setNotificationModePending(true);
+            setNotificationModeError(null);
+            try {
+                await setRoomNotificationMode(client, room.roomId, mode);
+                setNotificationModeState(mode);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to update channel notifications.";
+                setNotificationModeError(message);
+                refreshRoomNotificationMode();
+            } finally {
+                setNotificationModePending(false);
+            }
+        },
+        [client, notificationMode, notificationModePending, refreshRoomNotificationMode, room.roomId],
+    );
 
     return (
         <div className="rs-panel">
@@ -59,6 +130,33 @@ export function InfoPanel({
                     <span>Encryption</span>
                     <span className={`rs-chip ${encrypted ? "is-encrypted" : ""}`}>{encrypted ? "Encrypted" : "Unencrypted"}</span>
                 </div>
+            </section>
+
+            <section className="rs-section">
+                <div className="rs-section-head">
+                    <h3 className="rs-section-title">Notifications</h3>
+                    <span className="rs-chip">{roomNotificationModeSummary(notificationMode)}</span>
+                </div>
+                <div className="rs-notification-modes">
+                    {ROOM_NOTIFICATION_MODE_OPTIONS.map((option) => (
+                        <button
+                            key={option.mode}
+                            type="button"
+                            className={`rs-notification-mode${notificationMode === option.mode ? " is-active" : ""}`}
+                            onClick={() => {
+                                void updateRoomNotificationMode(option.mode);
+                            }}
+                            disabled={notificationModePending}
+                        >
+                            {option.label}
+                        </button>
+                    ))}
+                </div>
+                {notificationModeError ? (
+                    <p className="rs-notification-error">{notificationModeError}</p>
+                ) : (
+                    <p className="rs-notification-hint">Applies to this channel for your account.</p>
+                )}
             </section>
 
             <section className="rs-section">

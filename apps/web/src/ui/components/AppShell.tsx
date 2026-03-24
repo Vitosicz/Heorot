@@ -2254,7 +2254,6 @@ export function AppShell({ client, onLogout }: AppShellProps): React.ReactElemen
                 onResolved={({ roomId, created, isGroup, targetCount }) => {
                     setCreateDirectChatOpen(false);
                     focusRoom(roomId);
-                    setPendingFocusRoomId(roomId);
                     pushToast({
                         type: "success",
                         message: isGroup
