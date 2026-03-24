@@ -5,6 +5,7 @@ import {
     type Room,
     type RoomMember,
 } from "matrix-js-sdk/src/matrix";
+import { joinRoomWithRetry } from "../rooms/joinFlow";
 
 const MATRIX_USER_ID_PATTERN = /^@[^:\s]+:[^\s]+$/;
 
@@ -421,6 +422,24 @@ export function findExistingDirectGroupRoomId(client: MatrixClient, targetUserId
     return findMappedDirectGroupRoomId(client, normalizedTargets, ownUserId);
 }
 
+async function ensureDirectRoomJoined(client: MatrixClient, roomId: string): Promise<void> {
+    const room = client.getRoom(roomId);
+    const membership = room?.getMyMembership();
+    if (membership === "join") {
+        return;
+    }
+
+    if (membership !== "invite" && membership !== "knock") {
+        return;
+    }
+
+    await joinRoomWithRetry(client, roomId);
+    const latestRoom = client.getRoom(roomId) ?? room;
+    if (latestRoom?.getMyMembership() !== "join") {
+        throw new Error("Room join did not complete. Please try again.");
+    }
+}
+
 export async function ensureDirectRoomMapping(
     client: MatrixClient,
     roomId: string,
@@ -487,6 +506,7 @@ export async function createOrReuseDirectChat(
     const existingRoomId = findExistingDirectRoomId(client, trimmedTarget);
     if (existingRoomId) {
         await ensureDirectRoomMappings(client, existingRoomId, [trimmedTarget]);
+        await ensureDirectRoomJoined(client, existingRoomId);
         return { roomId: existingRoomId, created: false };
     }
 
@@ -512,6 +532,7 @@ export async function createOrReuseDirectGroupChat(
     const existingRoomId = findExistingDirectGroupRoomId(client, targets);
     if (existingRoomId) {
         await ensureDirectRoomMappings(client, existingRoomId, targets, { replaceExisting: false });
+        await ensureDirectRoomJoined(client, existingRoomId);
         return { roomId: existingRoomId, created: false };
     }
 

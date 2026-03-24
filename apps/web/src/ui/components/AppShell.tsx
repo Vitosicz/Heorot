@@ -850,6 +850,7 @@ export function AppShell({ client, onLogout }: AppShellProps): React.ReactElemen
     const [voiceParticipantsByRoomId, setVoiceParticipantsByRoomId] = useState<Map<string, Set<string>>>(new Map());
     const [timelineFocusBottomNonce, setTimelineFocusBottomNonce] = useState(0);
     const voiceRoomRef = useRef<VoiceRoomHandle | null>(null);
+    const autoJoiningDirectRoomIdsRef = useRef<Set<string>>(new Set());
     const openRoomAtBottom = useCallback((roomId: string): void => {
         setActiveRoomId(roomId);
         setTimelineFocusBottomNonce((value) => value + 1);
@@ -1718,6 +1719,44 @@ export function AppShell({ client, onLogout }: AppShellProps): React.ReactElemen
         },
         [discoverableSpaceChannels, joiningDiscoverableRoomId, pushToast, requestJoinRoom, selectedSpaceId],
     );
+
+    useEffect(() => {
+        if (!activeRoomId) {
+            return;
+        }
+
+        const activeRoomCandidate = client.getRoom(activeRoomId);
+        if (!activeRoomCandidate || activeRoomCandidate.isSpaceRoom()) {
+            return;
+        }
+        if (!directRoomIds.has(activeRoomCandidate.roomId)) {
+            return;
+        }
+
+        const membership = activeRoomCandidate.getMyMembership();
+        if (membership === "join") {
+            autoJoiningDirectRoomIdsRef.current.delete(activeRoomCandidate.roomId);
+            return;
+        }
+        if (membership !== "invite" && membership !== "knock") {
+            return;
+        }
+        if (autoJoiningDirectRoomIdsRef.current.has(activeRoomCandidate.roomId)) {
+            return;
+        }
+
+        autoJoiningDirectRoomIdsRef.current.add(activeRoomCandidate.roomId);
+        void requestJoinRoom(activeRoomCandidate.roomId, { preferredSpaceId: null })
+            .catch((joinError) => {
+                pushToast({
+                    type: "error",
+                    message: describeJoinError(joinError, activeRoomCandidate.roomId),
+                });
+            })
+            .finally(() => {
+                autoJoiningDirectRoomIdsRef.current.delete(activeRoomCandidate.roomId);
+            });
+    }, [activeRoomId, client, directRoomIds, pushToast, requestJoinRoom]);
 
     useEffect(() => {
         if (!pendingFocusRoomId) {
