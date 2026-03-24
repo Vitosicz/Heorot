@@ -33,29 +33,13 @@ function setCachedUserInfo(candidate) {
 }
 
 self.addEventListener("message", (event) => {
-    const serviceWorkerOrigin = self.location?.origin;
-    if (!serviceWorkerOrigin) {
+    const expectedOrigin = self.location?.origin;
+    if (typeof expectedOrigin !== "string" || expectedOrigin.length === 0) {
         return;
     }
 
-    const eventOrigin = typeof event?.origin === "string" ? event.origin : "";
-    if (eventOrigin.length > 0 && eventOrigin !== serviceWorkerOrigin) {
+    if (typeof event?.origin !== "string" || event.origin !== expectedOrigin) {
         return;
-    }
-
-    if (eventOrigin.length === 0) {
-        const sourceUrl = event?.source && typeof event.source === "object" ? event.source.url : undefined;
-        if (typeof sourceUrl !== "string" || sourceUrl.length === 0) {
-            return;
-        }
-
-        try {
-            if (new URL(sourceUrl).origin !== serviceWorkerOrigin) {
-                return;
-            }
-        } catch {
-            return;
-        }
     }
 
     if (!event?.data || event.data.type !== "userinfo_sync") {
@@ -206,6 +190,17 @@ async function getAuthData(client) {
 async function askClientForUserInfo(client) {
     return await new Promise((resolve, reject) => {
         const responseKey = generateResponseKey();
+        const clientOrigin = (() => {
+            try {
+                return new URL(client.url).origin;
+            } catch {
+                return null;
+            }
+        })();
+        if (!clientOrigin) {
+            reject(new Error("Unable to resolve client origin"));
+            return;
+        }
 
         const timeoutId = setTimeout(() => {
             self.removeEventListener("message", onMessage);
@@ -213,29 +208,8 @@ async function askClientForUserInfo(client) {
         }, 1000);
 
         const onMessage = (event) => {
-            const serviceWorkerOrigin = self.location?.origin;
-            if (!serviceWorkerOrigin) {
+            if (typeof event?.origin !== "string" || event.origin !== clientOrigin) {
                 return;
-            }
-
-            const eventOrigin = typeof event?.origin === "string" ? event.origin : "";
-            if (eventOrigin.length > 0 && eventOrigin !== serviceWorkerOrigin) {
-                return;
-            }
-
-            if (eventOrigin.length === 0) {
-                const sourceUrl = event?.source && typeof event.source === "object" ? event.source.url : undefined;
-                if (typeof sourceUrl !== "string" || sourceUrl.length === 0) {
-                    return;
-                }
-
-                try {
-                    if (new URL(sourceUrl).origin !== serviceWorkerOrigin) {
-                        return;
-                    }
-                } catch {
-                    return;
-                }
             }
 
             if (event.source?.id !== client.id) {
