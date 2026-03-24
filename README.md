@@ -266,7 +266,6 @@ npm run build:desktop
 
 - **Alpha stage** — UX and some settings flows are still evolving
 - **No auto-updater** — update by pulling the repo and rebuilding
-- **Voice is in-memory** — participant state resets on relay restart; rate limiting is not shared across multiple relay instances
 - **No push notifications** — browser/OS notifications only while the app is open
 - **Voice media is direct UDP** — RTP traffic cannot go through an HTTP proxy; clients need UDP access to LiveKit or an external TURN server
 - **End-to-end tests** — coverage is unit tests only; integration and E2E test suite is not yet in place

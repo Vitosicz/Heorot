@@ -104,6 +104,11 @@ interface DecryptQueueItem {
     priority: number;
 }
 
+interface EncryptedMediaFetchError extends Error {
+    status?: number;
+    attemptUrl?: string;
+}
+
 interface MessageContent {
     msgtype?: unknown;
     body?: unknown;
@@ -203,6 +208,52 @@ function withImageRetryCacheBuster(url: string): string {
     return `${baseUrl}${separator}__heorot_retry=${Date.now()}${hash}`;
 }
 
+function rewriteMediaPath(url: string, fromPathPrefix: string, toPathPrefix: string): string | null {
+    try {
+        const parsed = new URL(url);
+        if (!parsed.pathname.startsWith(fromPathPrefix)) {
+            return null;
+        }
+        parsed.pathname = `${toPathPrefix}${parsed.pathname.slice(fromPathPrefix.length)}`;
+        return parsed.toString();
+    } catch {
+        return null;
+    }
+}
+
+function buildEncryptedMediaDownloadCandidates(primaryUrl: string): string[] {
+    const candidates = [primaryUrl];
+    const authCandidate = rewriteMediaPath(primaryUrl, "/_matrix/media/v3/", "/_matrix/client/v1/media/");
+    const legacyCandidate = rewriteMediaPath(primaryUrl, "/_matrix/client/v1/media/", "/_matrix/media/v3/");
+    if (authCandidate) {
+        candidates.push(authCandidate);
+    }
+    if (legacyCandidate) {
+        candidates.push(legacyCandidate);
+    }
+
+    return Array.from(new Set(candidates));
+}
+
+function toDecryptFailureReason(error: unknown, fallbackUrl?: string): string {
+    if (error instanceof DOMException && error.name === "AbortError") {
+        return "aborted";
+    }
+
+    if (error instanceof Error) {
+        const maybeFetchError = error as EncryptedMediaFetchError;
+        if (typeof maybeFetchError.status === "number") {
+            const origin = maybeFetchError.attemptUrl ?? fallbackUrl;
+            return origin
+                ? `download failed (${maybeFetchError.status}) at ${origin}`
+                : `download failed (${maybeFetchError.status})`;
+        }
+        return error.message || "unknown error";
+    }
+
+    return "unknown error";
+}
+
 function retryImageLoadOnce(event: React.SyntheticEvent<HTMLImageElement>): void {
     const image = event.currentTarget;
     if (image.dataset.heorotRetryAttempted === "1") {
@@ -219,46 +270,64 @@ function retryImageLoadOnce(event: React.SyntheticEvent<HTMLImageElement>): void
 }
 
 async function fetchEncryptedArrayBufferWithRetry(
-    url: string,
+    urls: readonly string[],
     options: {
         signal?: AbortSignal;
         timeoutMs: number;
         retries: number;
+        accessToken?: string | null;
     },
 ): Promise<ArrayBuffer> {
-    const { signal, timeoutMs, retries } = options;
+    const { signal, timeoutMs, retries, accessToken } = options;
     let lastError: unknown = null;
+    const uniqueUrls = Array.from(new Set(urls.filter((url) => typeof url === "string" && url.length > 0)));
+    if (uniqueUrls.length === 0) {
+        throw new Error("No encrypted media URLs available");
+    }
+
+    const headers =
+        typeof accessToken === "string" && accessToken.length > 0
+            ? {
+                  Authorization: `Bearer ${accessToken}`,
+              }
+            : undefined;
 
     for (let attempt = 0; attempt <= retries; attempt += 1) {
         if (signal?.aborted) {
             throw new DOMException("Decrypt download aborted", "AbortError");
         }
 
-        const controller = new AbortController();
-        const onAbort = (): void => {
-            controller.abort();
-        };
-        signal?.addEventListener("abort", onAbort, { once: true });
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        for (const url of uniqueUrls) {
+            const controller = new AbortController();
+            const onAbort = (): void => {
+                controller.abort();
+            };
+            signal?.addEventListener("abort", onAbort, { once: true });
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-        try {
-            const response = await fetch(url, { signal: controller.signal });
-            if (!response.ok) {
-                throw new Error(`Failed to download media (${response.status})`);
+            try {
+                const response = await fetch(url, { signal: controller.signal, headers });
+                if (!response.ok) {
+                    const error = new Error(`Failed to download media (${response.status})`) as EncryptedMediaFetchError;
+                    error.status = response.status;
+                    error.attemptUrl = url;
+                    throw error;
+                }
+                return await response.arrayBuffer();
+            } catch (error) {
+                lastError = error;
+                if (signal?.aborted) {
+                    throw new DOMException("Decrypt download aborted", "AbortError");
+                }
+            } finally {
+                clearTimeout(timeoutId);
+                signal?.removeEventListener("abort", onAbort);
             }
-            return await response.arrayBuffer();
-        } catch (error) {
-            lastError = error;
-            if (signal?.aborted) {
-                throw new DOMException("Decrypt download aborted", "AbortError");
-            }
-            if (attempt < retries) {
-                const backoffMs = Math.min(1200, 300 * 2 ** attempt);
-                await delay(backoffMs);
-            }
-        } finally {
-            clearTimeout(timeoutId);
-            signal?.removeEventListener("abort", onAbort);
+        }
+
+        if (attempt < retries) {
+            const backoffMs = Math.min(1200, 300 * 2 ** attempt);
+            await delay(backoffMs);
         }
     }
 
@@ -1143,6 +1212,7 @@ export function Timeline({
     const activeDecryptCountRef = useRef(0);
     const failedDecryptUntilRef = useRef<Record<string, number>>({});
     const decryptCacheAccessRef = useRef<Map<string, number>>(new Map());
+    const decryptFailureReasonRef = useRef<Record<string, string>>({});
     const decryptAbortControllersRef = useRef<Record<string, AbortController>>({});
     const lastViewportEnqueueAtRef = useRef(0);
     const linkPreviewByUrlRef = useRef<Record<string, UrlPreviewData | null>>({});
@@ -1411,6 +1481,7 @@ export function Timeline({
                 }
                 delete decryptedMediaUrlsRef.current[oldestKey];
                 delete failedDecryptUntilRef.current[oldestKey];
+                delete decryptFailureReasonRef.current[oldestKey];
                 accessMap.delete(oldestKey);
                 queuedDecryptionsRef.current.delete(oldestKey);
                 inFlightDecryptionsRef.current.delete(oldestKey);
@@ -1434,17 +1505,22 @@ export function Timeline({
             const { key, encryptedFile, mimeType } = item;
             const abortController = new AbortController();
             decryptAbortControllersRef.current[key] = abortController;
+            let sourceUrl: string | null = null;
             try {
-                const sourceUrl = mediaFromMxc(client, encryptedFile.url);
+                sourceUrl = mediaFromMxc(client, encryptedFile.url);
                 if (!sourceUrl) {
                     throw new Error("Unable to resolve media URL");
                 }
 
-                const encryptedData = await fetchEncryptedArrayBufferWithRetry(sourceUrl, {
-                    signal: abortController.signal,
-                    timeoutMs: decryptTuning.fetchTimeoutMs,
-                    retries: decryptTuning.fetchRetries,
-                });
+                const encryptedData = await fetchEncryptedArrayBufferWithRetry(
+                    buildEncryptedMediaDownloadCandidates(sourceUrl),
+                    {
+                        signal: abortController.signal,
+                        timeoutMs: decryptTuning.fetchTimeoutMs,
+                        retries: decryptTuning.fetchRetries,
+                        accessToken: client.getAccessToken() ?? null,
+                    },
+                );
                 const decryptedData = await encrypt.decryptAttachment(encryptedData, encryptedFile);
                 const objectUrl = URL.createObjectURL(new Blob([decryptedData], { type: mimeType }));
 
@@ -1459,13 +1535,18 @@ export function Timeline({
                 }
                 decryptedMediaUrlsRef.current[key] = objectUrl;
                 delete failedDecryptUntilRef.current[key];
+                delete decryptFailureReasonRef.current[key];
                 decryptCacheAccessRef.current.set(key, Date.now());
                 evictDecryptedMediaCacheIfNeeded();
-            } catch {
+            } catch (error) {
+                if (error instanceof DOMException && error.name === "AbortError") {
+                    return;
+                }
                 if (!cancelled) {
                     decryptedMediaUrlsRef.current[key] = null;
                     failedDecryptUntilRef.current[key] = Date.now() + decryptTuning.failureTtlMs;
                     decryptCacheAccessRef.current.delete(key);
+                    decryptFailureReasonRef.current[key] = toDecryptFailureReason(error, sourceUrl ?? undefined);
                 }
             } finally {
                 activeDecryptCountRef.current = Math.max(0, activeDecryptCountRef.current - 1);
@@ -1610,6 +1691,7 @@ export function Timeline({
                 }
             }
             decryptedMediaUrlsRef.current = {};
+            decryptFailureReasonRef.current = {};
             inFlightDecryptionsRef.current.clear();
             queuedDecryptionsRef.current.clear();
             decryptQueueRef.current = [];
@@ -1913,6 +1995,7 @@ export function Timeline({
                         decryptedMediaUrl === undefined &&
                         (queuedDecryptionsRef.current.has(key) || inFlightDecryptionsRef.current.has(key));
                     const failedToDecryptEncryptedMedia = Boolean(encryptedMediaFile) && decryptedMediaUrl === null;
+                    const decryptFailureReason = failedToDecryptEncryptedMedia ? decryptFailureReasonRef.current[key] : undefined;
                     const hasTextBody = body.trim().length > 0;
                     const imageAlt = hasTextBody ? body : "image";
                     const previewUrl = hasTextBody && !mediaMsgType ? getFirstPreviewableUrl(body) : null;
@@ -2118,6 +2201,7 @@ export function Timeline({
                                 <button
                                     type="button"
                                     className={`timeline-media-status timeline-media-status-error${showHeader ? "" : " timeline-media-status-grouped"}`}
+                                    title={decryptFailureReason}
                                     onClick={() => {
                                         if (decryptQueueItem) {
                                             enqueueDecrypt(decryptQueueItem, true);
@@ -2161,10 +2245,14 @@ export function Timeline({
                                                             return src;
                                                         }
 
-                                                        return (
-                                                            mxcThumbnailToHttp(client, src, width, height) ??
-                                                            mediaFromMxc(client, src)
-                                                        );
+                                                        return mxcThumbnailToHttp(client, src, width, height);
+                                                    }}
+                                                    resolveImageFallbackSource={(src) => {
+                                                        if (!/^mxc:\/\//i.test(src)) {
+                                                            return src;
+                                                        }
+
+                                                        return mediaFromMxc(client, src);
                                                     }}
                                                 />
                                             ) : (

@@ -1,4 +1,10 @@
 import type { MatrixClient, Room } from "matrix-js-sdk/src/matrix";
+import {
+    getMatrixErrorCode,
+    getMatrixErrorMessage,
+    getMatrixErrorStatus,
+    getMatrixRetryAfterMs,
+} from "./matrixError";
 
 interface JoinRoomWithRetryOptions {
     viaServers?: string[];
@@ -6,99 +12,9 @@ interface JoinRoomWithRetryOptions {
     retryDelayMs?: number;
 }
 
-interface MatrixLikeErrorData {
-    errcode?: unknown;
-    error?: unknown;
-    retry_after_ms?: unknown;
-    status?: unknown;
-    statusCode?: unknown;
-}
-
-interface MatrixLikeError {
-    errcode?: unknown;
-    httpStatus?: unknown;
-    status?: unknown;
-    statusCode?: unknown;
-    data?: MatrixLikeErrorData;
-    message?: unknown;
-}
-
 const DEFAULT_JOIN_MAX_ATTEMPTS = 3;
 const DEFAULT_JOIN_RETRY_DELAY_MS = 350;
 const RETRYABLE_JOIN_HTTP_STATUS = new Set([504, 524]);
-
-function getErrorMessage(error: unknown): string {
-    if (!error || typeof error !== "object") {
-        return "";
-    }
-
-    const matrixError = error as MatrixLikeError;
-    if (typeof matrixError.data?.error === "string" && matrixError.data.error.trim().length > 0) {
-        return matrixError.data.error;
-    }
-
-    if (typeof matrixError.message === "string" && matrixError.message.trim().length > 0) {
-        return matrixError.message;
-    }
-
-    return "";
-}
-
-function getErrorCode(error: unknown): string | null {
-    if (!error || typeof error !== "object") {
-        return null;
-    }
-
-    const matrixError = error as MatrixLikeError;
-    if (typeof matrixError.errcode === "string") {
-        return matrixError.errcode;
-    }
-    if (typeof matrixError.data?.errcode === "string") {
-        return matrixError.data.errcode;
-    }
-
-    return null;
-}
-
-function getErrorStatus(error: unknown): number | null {
-    if (!error || typeof error !== "object") {
-        return null;
-    }
-
-    const matrixError = error as MatrixLikeError;
-    const candidate =
-        typeof matrixError.httpStatus === "number"
-            ? matrixError.httpStatus
-            : typeof matrixError.statusCode === "number"
-              ? matrixError.statusCode
-              : typeof matrixError.status === "number"
-                ? matrixError.status
-                : typeof matrixError.data?.statusCode === "number"
-                  ? matrixError.data.statusCode
-                  : typeof matrixError.data?.status === "number"
-                    ? matrixError.data.status
-                    : null;
-
-    if (typeof candidate !== "number" || !Number.isFinite(candidate)) {
-        return null;
-    }
-
-    return candidate;
-}
-
-function getRetryAfterMs(error: unknown): number | null {
-    if (!error || typeof error !== "object") {
-        return null;
-    }
-
-    const matrixError = error as MatrixLikeError;
-    const candidate = matrixError.data?.retry_after_ms;
-    if (typeof candidate !== "number" || !Number.isFinite(candidate) || candidate < 0) {
-        return null;
-    }
-
-    return candidate;
-}
 
 function sanitizeViaServers(viaServers: string[] | undefined): string[] {
     if (!Array.isArray(viaServers)) {
@@ -134,7 +50,7 @@ function normalizeRetryDelayMs(value: number | undefined): number {
 }
 
 function isRetryableJoinError(error: unknown): boolean {
-    const status = getErrorStatus(error);
+    const status = getMatrixErrorStatus(error);
     return status !== null && RETRYABLE_JOIN_HTTP_STATUS.has(status);
 }
 
@@ -149,9 +65,9 @@ function sleep(durationMs: number): Promise<void> {
 }
 
 export function describeJoinError(error: unknown, target?: string): string {
-    const status = getErrorStatus(error);
-    const errcode = getErrorCode(error);
-    const message = getErrorMessage(error);
+    const status = getMatrixErrorStatus(error);
+    const errcode = getMatrixErrorCode(error);
+    const message = getMatrixErrorMessage(error);
 
     if (status === 403 || errcode === "M_FORBIDDEN") {
         return "You do not have permission to join this room.";
@@ -162,7 +78,7 @@ export function describeJoinError(error: unknown, target?: string): string {
     }
 
     if (status === 429 || errcode === "M_LIMIT_EXCEEDED") {
-        const retryAfterMs = getRetryAfterMs(error);
+        const retryAfterMs = getMatrixRetryAfterMs(error);
         if (retryAfterMs && retryAfterMs > 0) {
             const retryAfterSeconds = Math.max(1, Math.round(retryAfterMs / 1000));
             return `Join rate limit reached. Try again in ${retryAfterSeconds}s.`;

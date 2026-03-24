@@ -24,6 +24,7 @@ import {
     restoreKeyBackupWithSecretStorageCredential,
     triggerRoomHistoryDecryption,
 } from "../adapters/securityRecoveryAdapter";
+import { syncMediaServiceWorkerAuthState } from "../serviceWorker/registerMediaServiceWorker";
 
 export type MatrixSessionStatus =
     | "booting"
@@ -501,6 +502,20 @@ export function MatrixProvider({ children }: React.PropsWithChildren): React.Rea
             isCancelled = true;
         };
     }, [applyPostLoginState]);
+
+    useEffect(() => {
+        const client = state.client;
+        if (!client) {
+            syncMediaServiceWorkerAuthState(null);
+            return;
+        }
+
+        syncMediaServiceWorkerAuthState({
+            userId: client.getUserId() ?? undefined,
+            deviceId: client.getDeviceId() ?? undefined,
+            homeserver: client.getHomeserverUrl(),
+        });
+    }, [state.client, state.status]);
 
     useEffect(() => {
         let isCancelled = false;

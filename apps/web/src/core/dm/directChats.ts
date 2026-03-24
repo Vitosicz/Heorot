@@ -146,11 +146,15 @@ function patchSelfMappedDirectRooms(client: MatrixClient, content: MDirectConten
     return patched;
 }
 
+function compareAlphabetically(left: string, right: string): number {
+    return left.localeCompare(right);
+}
+
 function toComparableShape(content: MDirectContent): Record<string, string[]> {
     return Object.fromEntries(
         Object.keys(content)
-            .sort()
-            .map((userId) => [userId, [...new Set(content[userId])].sort()]),
+            .sort(compareAlphabetically)
+            .map((userId) => [userId, [...new Set(content[userId])].sort(compareAlphabetically)]),
     );
 }
 

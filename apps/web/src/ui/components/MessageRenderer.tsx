@@ -6,6 +6,7 @@ interface MessageRendererProps {
     format?: string;
     formattedBody?: string;
     resolveImageSource?: (src: string, width: number, height: number) => string | null;
+    resolveImageFallbackSource?: (src: string, width: number, height: number) => string | null;
     resolveMentionDisplayName?: (userId: string) => string | null;
     ownUserId?: string | null;
 }
@@ -141,10 +142,26 @@ function hasMatrixEmoticonMarker(element: HTMLElement): boolean {
     return normalized === "" || normalized === "true" || normalized === "1";
 }
 
+function handleSanitizedImageError(event: React.SyntheticEvent<HTMLImageElement>): void {
+    const image = event.currentTarget;
+    if (image.dataset.heorotFallbackApplied === "1") {
+        return;
+    }
+
+    const fallbackSource = image.dataset.heorotFallbackSrc;
+    if (!fallbackSource || fallbackSource === image.currentSrc || fallbackSource === image.src) {
+        return;
+    }
+
+    image.dataset.heorotFallbackApplied = "1";
+    image.src = fallbackSource;
+}
+
 function sanitizeNodes(
     nodes: NodeListOf<ChildNode>,
     keyPrefix: string,
     resolveImageSource?: (src: string, width: number, height: number) => string | null,
+    resolveImageFallbackSource?: (src: string, width: number, height: number) => string | null,
     resolveMentionDisplayName?: (userId: string) => string | null,
     ownUserId?: string | null,
 ): React.ReactNode[] {
@@ -190,6 +207,8 @@ function sanitizeNodes(
             const height = sanitizeDimension(element.getAttribute("height"), 24);
             const resolvedSrc = resolveImageSource?.(src, width, height);
             const normalizedSrc = normalizeAllowedImageSource(resolvedSrc ?? src);
+            const resolvedFallbackSrc = resolveImageFallbackSource?.(src, width, height);
+            const normalizedFallbackSrc = normalizeAllowedImageSource(resolvedFallbackSrc ?? "");
             if (!normalizedSrc) {
                 return;
             }
@@ -209,6 +228,8 @@ function sanitizeNodes(
                     decoding="async"
                     className="message-renderer-emoticon"
                     data-mx-emoticon="true"
+                    data-heorot-fallback-src={normalizedFallbackSrc ?? undefined}
+                    onError={handleSanitizedImageError}
                 />,
             );
             return;
@@ -219,6 +240,7 @@ function sanitizeNodes(
                 element.childNodes as NodeListOf<ChildNode>,
                 `${key}_child`,
                 resolveImageSource,
+                resolveImageFallbackSource,
                 resolveMentionDisplayName,
                 ownUserId,
             ),
@@ -231,6 +253,7 @@ function sanitizeNodes(
 function renderSanitizedFormattedBody(
     formattedBody: string,
     resolveImageSource?: (src: string, width: number, height: number) => string | null,
+    resolveImageFallbackSource?: (src: string, width: number, height: number) => string | null,
     resolveMentionDisplayName?: (userId: string) => string | null,
     ownUserId?: string | null,
 ): React.ReactNode[] | null {
@@ -245,6 +268,7 @@ function renderSanitizedFormattedBody(
             document.body.childNodes,
             "message_html",
             resolveImageSource,
+            resolveImageFallbackSource,
             resolveMentionDisplayName,
             ownUserId,
         );
@@ -258,6 +282,7 @@ export function MessageRenderer({
     format,
     formattedBody,
     resolveImageSource,
+    resolveImageFallbackSource,
     resolveMentionDisplayName,
     ownUserId,
 }: MessageRendererProps): React.ReactElement {
@@ -269,6 +294,7 @@ export function MessageRenderer({
         const nodes = renderSanitizedFormattedBody(
             formattedBody,
             resolveImageSource,
+            resolveImageFallbackSource,
             resolveMentionDisplayName,
             ownUserId,
         );
@@ -277,7 +303,7 @@ export function MessageRenderer({
         }
 
         return nodes;
-    }, [format, formattedBody, ownUserId, resolveImageSource, resolveMentionDisplayName]);
+    }, [format, formattedBody, ownUserId, resolveImageSource, resolveImageFallbackSource, resolveMentionDisplayName]);
 
     if (sanitizedNodes) {
         return <>{sanitizedNodes}</>;

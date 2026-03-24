@@ -135,3 +135,4 @@ Expected:
 
 - `PASS`: all cases pass, no unrelated room redirects, no DM duplicates, no blocked composer state.
 - `FAIL`: any case fails. Attach failing case ID, exact toast/error text, and screenshot/log snippet.
+-

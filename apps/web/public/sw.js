@@ -32,7 +32,33 @@ function setCachedUserInfo(candidate) {
     return cachedUserInfo;
 }
 
+function isTrustedMessageOrigin(event) {
+    const serviceWorkerOrigin = self.location?.origin;
+    if (!serviceWorkerOrigin) {
+        return false;
+    }
+
+    if (typeof event?.origin === "string" && event.origin.length > 0) {
+        return event.origin === serviceWorkerOrigin;
+    }
+
+    const sourceUrl = event?.source && typeof event.source === "object" ? event.source.url : undefined;
+    if (typeof sourceUrl === "string" && sourceUrl.length > 0) {
+        try {
+            return new URL(sourceUrl).origin === serviceWorkerOrigin;
+        } catch {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 self.addEventListener("message", (event) => {
+    if (!isTrustedMessageOrigin(event)) {
+        return;
+    }
+
     if (!event?.data || event.data.type !== "userinfo_sync") {
         return;
     }

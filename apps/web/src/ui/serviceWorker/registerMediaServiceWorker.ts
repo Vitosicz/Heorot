@@ -21,6 +21,8 @@ interface PostMessageTarget {
     postMessage: (message: unknown) => void;
 }
 
+let latestUserInfoOverride: StoredUserInfo | null = null;
+
 declare global {
     interface Window {
         __heorotMediaSwRegistered?: boolean;
@@ -35,27 +37,52 @@ function readStoredUserInfo(): StoredUserInfo {
     };
 }
 
-function postUserInfoSync(target: PostMessageTarget | null | undefined): void {
+function normalizeStoredUserInfo(candidate: StoredUserInfo | null | undefined): StoredUserInfo {
+    return {
+        userId: typeof candidate?.userId === "string" && candidate.userId ? candidate.userId : undefined,
+        deviceId: typeof candidate?.deviceId === "string" && candidate.deviceId ? candidate.deviceId : undefined,
+        homeserver: typeof candidate?.homeserver === "string" && candidate.homeserver ? candidate.homeserver : undefined,
+    };
+}
+
+function resolveUserInfo(preferred: StoredUserInfo | null | undefined): StoredUserInfo {
+    const normalizedPreferred = normalizeStoredUserInfo(preferred);
+    if (preferred) {
+        return normalizedPreferred;
+    }
+
+    const storedUserInfo = normalizeStoredUserInfo(readStoredUserInfo());
+    return {
+        userId: storedUserInfo.userId,
+        deviceId: storedUserInfo.deviceId,
+        homeserver: storedUserInfo.homeserver,
+    };
+}
+
+function postUserInfoSync(target: PostMessageTarget | null | undefined, preferred?: StoredUserInfo | null): void {
     if (!target) {
         return;
     }
 
     const payload: UserInfoSyncMessage = {
         type: "userinfo_sync",
-        ...readStoredUserInfo(),
+        ...resolveUserInfo(preferred ?? latestUserInfoOverride),
     };
     target.postMessage(payload);
 }
 
-async function syncUserInfoToServiceWorker(registration?: ServiceWorkerRegistration): Promise<void> {
+async function syncUserInfoToServiceWorker(
+    registration?: ServiceWorkerRegistration,
+    preferred?: StoredUserInfo | null,
+): Promise<void> {
     const controller = navigator.serviceWorker.controller;
     if (controller) {
-        postUserInfoSync(controller);
+        postUserInfoSync(controller, preferred);
         return;
     }
 
     const readyRegistration = registration ?? (await navigator.serviceWorker.ready);
-    postUserInfoSync(readyRegistration.active);
+    postUserInfoSync(readyRegistration.active, preferred);
 }
 
 function onServiceWorkerMessage(event: MessageEvent<UserInfoRequestMessage>): void {
@@ -69,13 +96,22 @@ function onServiceWorkerMessage(event: MessageEvent<UserInfoRequestMessage>): vo
         return;
     }
 
-    const userInfo = readStoredUserInfo();
+    const userInfo = resolveUserInfo(latestUserInfoOverride);
     source.postMessage({
         responseKey: data.responseKey,
         ...userInfo,
     });
 
-    postUserInfoSync(source);
+    postUserInfoSync(source, latestUserInfoOverride);
+}
+
+export function syncMediaServiceWorkerAuthState(userInfo: StoredUserInfo | null): void {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+        return;
+    }
+
+    latestUserInfoOverride = userInfo ? normalizeStoredUserInfo(userInfo) : {};
+    void syncUserInfoToServiceWorker(undefined, latestUserInfoOverride);
 }
 
 export async function registerMediaServiceWorker(): Promise<void> {

@@ -1,23 +1,12 @@
 import { EventType, type MatrixClient, type Room } from "matrix-js-sdk/src/matrix";
 
 import { isValidMatrixUserId } from "../dm/directChats";
-
-interface MatrixLikeErrorData {
-    errcode?: unknown;
-    error?: unknown;
-    retry_after_ms?: unknown;
-    status?: unknown;
-    statusCode?: unknown;
-}
-
-interface MatrixLikeError {
-    errcode?: unknown;
-    httpStatus?: unknown;
-    status?: unknown;
-    statusCode?: unknown;
-    data?: MatrixLikeErrorData;
-    message?: unknown;
-}
+import {
+    getMatrixErrorCode,
+    getMatrixErrorMessage,
+    getMatrixErrorStatus,
+    getMatrixRetryAfterMs,
+} from "./matrixError";
 
 export interface InviteFailure {
     userId: string;
@@ -36,78 +25,6 @@ interface ParentSpaceInviteFailure {
 
 const INVITE_SPLIT_PATTERN = /[\s,;]+/;
 
-function getErrorMessage(error: unknown): string {
-    if (!error || typeof error !== "object") {
-        return "";
-    }
-
-    const matrixError = error as MatrixLikeError;
-    if (typeof matrixError.data?.error === "string" && matrixError.data.error.trim().length > 0) {
-        return matrixError.data.error;
-    }
-    if (typeof matrixError.message === "string" && matrixError.message.trim().length > 0) {
-        return matrixError.message;
-    }
-
-    return "";
-}
-
-function getErrorCode(error: unknown): string | null {
-    if (!error || typeof error !== "object") {
-        return null;
-    }
-
-    const matrixError = error as MatrixLikeError;
-    if (typeof matrixError.errcode === "string") {
-        return matrixError.errcode;
-    }
-    if (typeof matrixError.data?.errcode === "string") {
-        return matrixError.data.errcode;
-    }
-
-    return null;
-}
-
-function getErrorStatus(error: unknown): number | null {
-    if (!error || typeof error !== "object") {
-        return null;
-    }
-
-    const matrixError = error as MatrixLikeError;
-    const candidate =
-        typeof matrixError.httpStatus === "number"
-            ? matrixError.httpStatus
-            : typeof matrixError.statusCode === "number"
-              ? matrixError.statusCode
-              : typeof matrixError.status === "number"
-                ? matrixError.status
-                : typeof matrixError.data?.statusCode === "number"
-                  ? matrixError.data.statusCode
-                  : typeof matrixError.data?.status === "number"
-                    ? matrixError.data.status
-                    : null;
-
-    if (typeof candidate !== "number" || !Number.isFinite(candidate)) {
-        return null;
-    }
-
-    return candidate;
-}
-
-function getRetryAfterMs(error: unknown): number | null {
-    if (!error || typeof error !== "object") {
-        return null;
-    }
-
-    const matrixError = error as MatrixLikeError;
-    const candidate = matrixError.data?.retry_after_ms;
-    if (typeof candidate !== "number" || !Number.isFinite(candidate) || candidate < 0) {
-        return null;
-    }
-
-    return candidate;
-}
-
 function normalizeReason(reason: string): string | undefined {
     const normalized = reason.trim();
     if (!normalized) {
@@ -117,9 +34,9 @@ function normalizeReason(reason: string): string | undefined {
 }
 
 function describeInviteError(error: unknown): string {
-    const status = getErrorStatus(error);
-    const errcode = getErrorCode(error);
-    const message = getErrorMessage(error);
+    const status = getMatrixErrorStatus(error);
+    const errcode = getMatrixErrorCode(error);
+    const message = getMatrixErrorMessage(error);
 
     if (status === 403 || errcode === "M_FORBIDDEN") {
         return "You do not have permission to invite this user.";
@@ -134,7 +51,7 @@ function describeInviteError(error: unknown): string {
     }
 
     if (status === 429 || errcode === "M_LIMIT_EXCEEDED") {
-        const retryAfterMs = getRetryAfterMs(error);
+        const retryAfterMs = getMatrixRetryAfterMs(error);
         if (retryAfterMs && retryAfterMs > 0) {
             const retryAfterSeconds = Math.max(1, Math.round(retryAfterMs / 1000));
             return `Invite rate limit reached. Try again in ${retryAfterSeconds}s.`;
@@ -197,13 +114,13 @@ function getInvitableParentSpaceIds(client: MatrixClient, roomId: string): strin
 }
 
 function isAlreadyInRoomError(error: unknown): boolean {
-    const status = getErrorStatus(error);
-    const errcode = getErrorCode(error);
+    const status = getMatrixErrorStatus(error);
+    const errcode = getMatrixErrorCode(error);
     if (status === 409 || errcode === "M_BAD_STATE") {
         return true;
     }
 
-    const message = getErrorMessage(error).toLowerCase();
+    const message = getMatrixErrorMessage(error).toLowerCase();
     return message.includes("already in") || message.includes("already joined");
 }
 
