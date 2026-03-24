@@ -1341,9 +1341,9 @@ textarea {
 .room-item-voice-users {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-left: 0;
-    padding-left: 0;
+    gap: 5px;
+    margin-left: 2px;
+    padding-left: 2px;
     border-left: 0;
 }
 
@@ -1353,10 +1353,10 @@ textarea {
     color: var(--text-muted);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     min-width: 0;
     border-radius: 6px;
-    padding: 6px 6px 6px 0;
+    padding: 5px 4px 5px 0;
     text-align: left;
     cursor: pointer;
 }
@@ -1381,16 +1381,16 @@ textarea {
 .room-item-voice-avatar-wrap {
     position: relative;
     flex-shrink: 0;
-    width: 34px;
-    height: 34px;
+    width: 31px;
+    height: 31px;
     display: grid;
     place-items: center;
     line-height: 0;
 }
 
 .room-item-voice-avatar {
-    width: 34px;
-    height: 34px;
+    width: 31px;
+    height: 31px;
     border-radius: 999px;
     flex-shrink: 0;
 }
@@ -1405,7 +1405,7 @@ textarea {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
     line-height: 1.2;
     flex: 1;
@@ -3954,8 +3954,8 @@ img.voice-ctrl-icon {
     padding: 0;
     list-style: none;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(162px, 1fr));
+    gap: 16px;
     align-content: start;
 }
 
@@ -3963,8 +3963,8 @@ img.voice-ctrl-icon {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
-    padding: 18px 14px 16px;
+    gap: 10px;
+    padding: 16px 12px 14px;
     border-radius: 12px;
     background:
         radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 58%),
@@ -3994,8 +3994,8 @@ img.voice-ctrl-icon {
 }
 
 .voice-room-participant-avatar {
-    width: 118px;
-    height: 118px;
+    width: 106px;
+    height: 106px;
     border-radius: 50%;
     overflow: hidden;
 }
@@ -4005,12 +4005,12 @@ img.voice-ctrl-icon {
 }
 
 .voice-room-participant-avatar .avatar-fallback {
-    font-size: 36px;
+    font-size: 32px;
 }
 
 .voice-room-speaking-indicator {
     position: absolute;
-    inset: -6px;
+    inset: -5px;
     border-radius: 50%;
     border: 4px solid var(--status-online);
     animation: voice-speaking-pulse 1s ease-in-out infinite;

@@ -1957,9 +1957,7 @@ export const VoiceRoom = React.forwardRef<VoiceRoomHandle, VoiceRoomProps>(funct
                                             aria-hidden="true"
                                         />
                                     </div>
-                                    <span className="voice-room-participant-name">
-                                        {isYou ? `${info.displayName} (You)` : info.displayName}
-                                    </span>
+                                    <span className="voice-room-participant-name">{info.displayName}</span>
                                     {p.isScreenSharing ? (
                                         <span className="voice-room-participant-live">LIVE</span>
                                     ) : null}

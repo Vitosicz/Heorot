@@ -1061,7 +1061,7 @@ export function RoomList({
                                     localVoiceSessionForRoom.status !== "disconnected" &&
                                     (participantUserId === localVoiceIdentity || isOwnIdentity),
                             );
-                            const participantName = isOwnIdentity ? "You" : participant.displayName;
+                            const participantName = participant.displayName?.trim() || participantUserId;
                             const isSpeaking = Boolean(
                                 liveSpeakingUserIds?.has(participantUserId) || liveSpeakingUserIds?.has(participant.identity),
                             );
